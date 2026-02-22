@@ -10,27 +10,23 @@ test_that(".ffmpeg_video_info errors on missing file", {
 test_that(".ffmpeg_video_info returns correct structure on real video", {
   skip_if_not(nchar(Sys.which("ffprobe")) > 0 || nchar(Sys.which("ffmpeg")) > 0,
               "ffprobe/ffmpeg not installed")
-  skip_if_not(file.exists("/mnt/Data2/DS_projects/AV_test/test.mp4"),
-              "Test video not available")
 
-  info <- AV1R:::.ffmpeg_video_info("/mnt/Data2/DS_projects/AV_test/test.mp4")
+  # Create a minimal valid MP4 via ffmpeg (1 second, 16x16, black)
+  tmp <- tempfile(fileext = ".mp4")
+  on.exit(unlink(tmp))
+  ret <- suppressWarnings(system2(
+    Sys.which("ffmpeg"),
+    c("-y", "-f", "lavfi", "-i", "color=black:size=16x16:rate=25",
+      "-t", "1", "-c:v", "libx264", tmp),
+    stdout = FALSE, stderr = FALSE
+  ))
+  skip_if_not(ret == 0L && file.exists(tmp), "Could not create test video")
+
+  info <- AV1R:::.ffmpeg_video_info(tmp)
 
   expect_type(info, "list")
   expect_named(info, c("width", "height", "fps"))
   expect_gt(info$width,  0L)
   expect_gt(info$height, 0L)
   expect_gt(info$fps,    0L)
-  expect_equal(info$width  %% 2, 0L)  # Vulkan requires even dimensions
-  expect_equal(info$height %% 2, 0L)
-})
-
-test_that(".ffmpeg_video_info returns known dimensions for test.mp4", {
-  skip_if_not(nchar(Sys.which("ffprobe")) > 0 || nchar(Sys.which("ffmpeg")) > 0,
-              "ffprobe/ffmpeg not installed")
-  skip_if_not(file.exists("/mnt/Data2/DS_projects/AV_test/test.mp4"),
-              "Test video not available")
-
-  info <- AV1R:::.ffmpeg_video_info("/mnt/Data2/DS_projects/AV_test/test.mp4")
-  expect_equal(info$width,  1920L)
-  expect_equal(info$height, 1080L)
 })

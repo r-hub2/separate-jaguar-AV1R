@@ -2,13 +2,20 @@
 // CPU encoding: ffmpeg вызывается через system() в R-коде (нет линковки с libavcodec)
 // GPU encoding: Vulkan через этот файл
 
-#include <R.h>
-#include <Rinternals.h>
 #include <cstring>
 #include <cstdio>
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+// R headers must come after C++ STL to avoid macro conflicts.
+// Rinternals.h defines length(x) as Rf_length(x) which clashes with
+// std::locale::length() on macOS/clang.
+#include <R.h>
+#include <Rinternals.h>
+#ifdef length
+#  undef length
+#endif
 
 #include "../inst/include/av1r.h"
 
