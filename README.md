@@ -1,8 +1,24 @@
 # AV1R
 
-AV1 video encoding for biological microscopy data.
+**AV1 video encoding for biological microscopy data.**
 
-Converts MP4/H.264, H.265/HEVC, AVI/MJPEG, and TIFF stacks to AV1 for significantly improved compression without quality loss.
+AV1R is an R package for biologists that converts legacy microscopy video formats (H.264/H.265, AVI/MJPEG, TIFF stacks) to the modern AV1 codec with minimal quality loss.
+
+## Why AV1R?
+
+- **Compress large TIFF stacks** from confocal microscopy, time-lapse, and EBImage workflows from hundreds of gigabytes to manageable sizes — without noticeable loss of information.
+- **Re-encode MP4 files** exported from CellProfiler, ImageJ/Fiji, and microscope software with ~2x better compression at the same visual quality.
+- **Standardise legacy recordings** — convert old AVI (MJPEG) and H.265 files to a single patent-free format suited for long-term archival.
+
+## GPU acceleration
+
+AV1R automatically selects the best available backend:
+
+| Priority | Backend | How |
+|----------|---------|-----|
+| 1 | **Vulkan** | `VK_KHR_VIDEO_ENCODE_AV1` — native GPU encode (coming soon in Mesa/RADV) |
+| 2 | **VAAPI** | `av1_vaapi` via FFmpeg — works now on AMD/Intel GPUs |
+| 3 | **CPU** | `libsvtav1` or `libaom-av1` via FFmpeg — always available |
 
 ## Quick Start
 
@@ -71,3 +87,7 @@ av1r_options(
 ## License
 
 MIT
+
+---
+
+[GitHub](https://github.com/Zabis13/AV1R) · [Issues](https://github.com/Zabis13/AV1R/issues)

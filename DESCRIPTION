@@ -6,16 +6,24 @@ Authors@R: c(
     person("Yuri", "Baramykov",
         email = "lbsbmsu@mail.ru",
         role = c("aut", "cre")))
-Description: Converts biological microscopy video formats (MP4/H.264, H.265/HEVC,
-    AVI/MJPEG, TIFF stacks) to the AV1 codec for significantly improved compression
-    without quality loss. Supports GPU-accelerated encoding via Vulkan
-    (VK_KHR_VIDEO_ENCODE_AV1) when available, with automatic fallback to CPU
-    encoding through FFmpeg and SVT-AV1. Designed for workflows involving
-    CellProfiler, ImageJ, EBImage, and confocal microscopy systems.
+Description: A tool for biologists to convert legacy microscopy video formats
+    (H.264/H.265, AVI/MJPEG, TIFF stacks) to the modern AV1 codec with minimal
+    quality loss. Typical use cases include compressing large TIFF stacks from
+    confocal microscopy and time-lapse experiments from hundreds of gigabytes to
+    manageable sizes, re-encoding MP4 files exported from CellProfiler, ImageJ/Fiji,
+    and microscope software with approximately 2x better compression at the same
+    visual quality, and converting legacy AVI (MJPEG) and H.265 recordings to a
+    single patent-free format suited for long-term archival. Automatically selects
+    the best available backend: GPU hardware acceleration via VAAPI (AMD/Intel) or
+    Vulkan (VK_KHR_VIDEO_ENCODE_AV1, when driver support is available), with
+    automatic fallback to CPU encoding through FFmpeg and SVT-AV1. Provides a
+    simple R API for batch conversion of entire experiment folders. Designed for
+    reproducible workflows: encoding parameters can be recorded alongside
+    experiment metadata.
 Depends: R (>= 4.1.0)
 License: MIT + file LICENSE
-URL: https://github.com/av1r/AV1R
-BugReports: https://github.com/av1r/AV1R/issues
+URL: https://github.com/Zabis13/AV1R
+BugReports: https://github.com/Zabis13/AV1R/issues
 Encoding: UTF-8
 SystemRequirements: C++17, GNU make, FFmpeg (>= 4.4) with
         libavcodec/libavformat, libvulkan-dev (optional, for GPU
@@ -25,6 +33,6 @@ Suggests: testthat (>= 3.0.0)
 RoxygenNote: 7.3.3
 Config/testthat/edition: 3
 NeedsCompilation: yes
-Packaged: 2026-02-22 14:53:51 UTC; yuri
+Packaged: 2026-02-22 15:15:06 UTC; yuri
 Author: Yuri Baramykov [aut, cre]
 Maintainer: Yuri Baramykov <lbsbmsu@mail.ru>
