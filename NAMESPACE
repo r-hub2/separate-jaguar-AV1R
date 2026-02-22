@@ -1,0 +1,11 @@
+useDynLib(AV1R, .registration = TRUE)
+
+export(convert_to_av1)
+export(detect_backend)
+export(av1r_options)
+export(read_tiff_stack)
+export(vulkan_available)
+export(vulkan_devices)
+export(av1r_status)
+export(convert_folder)
+export(measure_ssim)
