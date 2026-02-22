@@ -8,7 +8,6 @@ av1r_options(
   crf = 28L,
   preset = 8L,
   threads = 0L,
-  qp = NULL,
   bitrate = NULL,
   backend = "auto"
 )
@@ -23,13 +22,9 @@ Default 8 (good balance for microscopy batch jobs).}
 
 \item{threads}{Number of CPU threads. 0 = auto-detect.}
 
-\item{qp}{Explicit QP value for VAAPI CQP mode (0-255). \code{NULL}
-(default) = auto-detect via SSIM probe. Recommended range: 16-25 for
-visually transparent AV1. Overrides auto-detection, ignored if
-\code{bitrate} is set.}
-
 \item{bitrate}{Target video bitrate in kbps (e.g. \code{3000} for 3 Mbps).
-\code{NULL} (default) = auto SSIM-based QP. Overrides \code{qp}.}
+\code{NULL} (default) = auto-detect from input (55\% of source bitrate
+for VAAPI, CRF for CPU).}
 
 \item{backend}{\code{"auto"} (best GPU if available, else CPU),
 \code{"vulkan"} (Vulkan AV1), \code{"vaapi"} (VAAPI AV1, AMD/Intel),

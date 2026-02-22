@@ -20,21 +20,6 @@ read_tiff_stack <- function(path) {
 
   size_mb <- file.info(path)$size / 1024^2
 
-  # Use av package if available for quick metadata read
-  if (requireNamespace("av", quietly = TRUE)) {
-    info <- tryCatch(av::av_video_info(path), error = function(e) NULL)
-    if (!is.null(info) && !is.null(info$video)) {
-      v <- info$video
-      return(list(
-        path     = path,
-        n_frames = as.integer(v$frames),
-        width    = as.integer(v$width),
-        height   = as.integer(v$height),
-        size_mb  = round(size_mb, 2)
-      ))
-    }
-  }
-
   # Fallback: return size only
   list(
     path     = path,

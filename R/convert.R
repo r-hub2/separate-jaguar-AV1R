@@ -38,7 +38,8 @@ convert_to_av1 <- function(input, output, options = av1r_options()) {
     info <- .ffmpeg_video_info(input)
     .Call("R_av1r_vulkan_encode",
           input, output,
-          info$width, info$height, info$fps, options$crf)
+          info$width, info$height, info$fps, options$crf,
+          PACKAGE = "AV1R")
     message("AV1R: done.")
     return(invisible(0L))
   }
