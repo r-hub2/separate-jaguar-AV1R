@@ -1,26 +1,19 @@
 library(AV1R)
 
-input <- "/mnt/Data2/DS_projects/AV_test/test.mp4"
-output     <- "/mnt/Data2/DS_projects/AV_test/test_av1_gpu.mp4"
-
+input  <- "/mnt/Data2/DS_projects/AV_test/mitosis.tif"
+output <- "/mnt/Data2/DS_projects/AV_test/mitosis_av1.mp4"
 
 # Check what GPU backend is available
 bk <- detect_backend()
 cat("Detected backend:", bk, "\n")
 
-# Show GPU devices if Vulkan is available
-if (vulkan_available()) {
-  cat("Vulkan devices:\n")
-  cat(paste(" ", vulkan_devices()), sep = "\n")
-}
-
-# Encode using best available GPU backend
+# Encode TIFF stack
 convert_to_av1(
   input  = input,
   output = output,
   options = av1r_options(
-    crf     = 28,      # quality
-    backend = "auto"   # auto: vulkan > vaapi > cpu
+    crf     = 10,
+    backend = "auto"
   )
 )
 

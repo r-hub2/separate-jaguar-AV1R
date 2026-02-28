@@ -8,9 +8,11 @@
 #ifdef AV1R_USE_VULKAN
 
 #include <vulkan/vulkan.h>
+#include "vk_video/vulkan_video_encode_av1_khr.h"
 #include <vector>
 #include <stdexcept>
 #include <cstring>
+#include <cstdio>
 #include "av1r_vulkan_ctx.h"
 
 // ============================================================================
@@ -55,21 +57,64 @@ static uint32_t find_encode_queue_family(VkPhysicalDevice phys)
 // Logical device + encode queue
 // Адаптировано из ggmlR строки 4573-4960 (ggml_vk_get_device)
 // ============================================================================
-VkDevice av1r_create_logical_device(VkPhysicalDevice phys,
-                                     uint32_t* encode_qfamily_out)
+// Find a queue family with TRANSFER support (for vkCmdCopyBufferToImage)
+static uint32_t find_transfer_queue_family(VkPhysicalDevice phys)
 {
-    uint32_t qfamily = find_encode_queue_family(phys);
-    if (qfamily == UINT32_MAX) {
+    uint32_t count = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(phys, &count, nullptr);
+    std::vector<VkQueueFamilyProperties> props(count);
+    vkGetPhysicalDeviceQueueFamilyProperties(phys, &count, props.data());
+
+    // Prefer a queue with GRAPHICS|TRANSFER (family 0 typically)
+    for (uint32_t i = 0; i < count; i++) {
+        if ((props[i].queueFlags & VK_QUEUE_TRANSFER_BIT) &&
+            (props[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)) {
+            return i;
+        }
+    }
+    // Fallback: any queue with TRANSFER
+    for (uint32_t i = 0; i < count; i++) {
+        if (props[i].queueFlags & VK_QUEUE_TRANSFER_BIT) {
+            return i;
+        }
+    }
+    return UINT32_MAX;
+}
+
+VkDevice av1r_create_logical_device(VkPhysicalDevice phys,
+                                     uint32_t* encode_qfamily_out,
+                                     uint32_t* transfer_qfamily_out)
+{
+    uint32_t encFamily = find_encode_queue_family(phys);
+    if (encFamily == UINT32_MAX) {
         throw std::runtime_error("No VIDEO_ENCODE queue family on this GPU");
     }
-    if (encode_qfamily_out) *encode_qfamily_out = qfamily;
+    if (encode_qfamily_out) *encode_qfamily_out = encFamily;
+
+    uint32_t xferFamily = find_transfer_queue_family(phys);
+    if (xferFamily == UINT32_MAX) {
+        throw std::runtime_error("No TRANSFER queue family on this GPU");
+    }
+    if (transfer_qfamily_out) *transfer_qfamily_out = xferFamily;
 
     float priority = 1.0f;
-    VkDeviceQueueCreateInfo qci{};
-    qci.sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    qci.queueFamilyIndex = qfamily;
-    qci.queueCount       = 1;
-    qci.pQueuePriorities = &priority;
+    std::vector<VkDeviceQueueCreateInfo> qcis;
+
+    VkDeviceQueueCreateInfo encQci{};
+    encQci.sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    encQci.queueFamilyIndex = encFamily;
+    encQci.queueCount       = 1;
+    encQci.pQueuePriorities = &priority;
+    qcis.push_back(encQci);
+
+    if (xferFamily != encFamily) {
+        VkDeviceQueueCreateInfo xferQci{};
+        xferQci.sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        xferQci.queueFamilyIndex = xferFamily;
+        xferQci.queueCount       = 1;
+        xferQci.pQueuePriorities = &priority;
+        qcis.push_back(xferQci);
+    }
 
     // Расширения для AV1 video encode
     std::vector<const char*> dev_exts = {
@@ -82,8 +127,8 @@ VkDevice av1r_create_logical_device(VkPhysicalDevice phys,
 
     VkDeviceCreateInfo dci{};
     dci.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    dci.queueCreateInfoCount    = 1;
-    dci.pQueueCreateInfos       = &qci;
+    dci.queueCreateInfoCount    = static_cast<uint32_t>(qcis.size());
+    dci.pQueueCreateInfos       = qcis.data();
     dci.enabledExtensionCount   = static_cast<uint32_t>(dev_exts.size());
     dci.ppEnabledExtensionNames = dev_exts.data();
 

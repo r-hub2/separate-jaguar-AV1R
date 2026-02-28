@@ -46,7 +46,10 @@ if [ "$USE_VULKAN" = "auto" ] || [ "$USE_VULKAN" = "yes" ]; then
 
   HAVE_VULKAN_VIDEO="no"
   if [ "$HAVE_VULKAN_H" = "yes" ]; then
-    if grep -r "VK_KHR_VIDEO_ENCODE_AV1" /usr/include/vulkan/ >/dev/null 2>&1; then
+    # Bundled AV1 video headers in src/vk_video/
+    if [ -f "src/vk_video/vulkan_video_codec_av1std_encode.h" ]; then
+      HAVE_VULKAN_VIDEO="yes"
+    elif grep -r "VK_KHR_VIDEO_ENCODE_AV1" /usr/include/vulkan/ >/dev/null 2>&1; then
       HAVE_VULKAN_VIDEO="yes"
     elif [ -n "$VULKAN_SDK" ] && grep -r "VK_KHR_VIDEO_ENCODE_AV1" "$VULKAN_SDK/include/vulkan/" >/dev/null 2>&1; then
       HAVE_VULKAN_VIDEO="yes"

@@ -1,25 +1,24 @@
 Package: AV1R
 Type: Package
-Title: AV1 Video Encoding for Biological Microscopy Data
-Version: 0.1.0
+Title: 'AV1' Video Encoding for Biological Microscopy Data
+Version: 0.1.2
 Authors@R: c(
     person("Yuri", "Baramykov",
         email = "lbsbmsu@mail.ru",
         role = c("aut", "cre")))
-Description: A tool for biologists to convert legacy microscopy video formats
-    (H.264/H.265, AVI/MJPEG, TIFF stacks) to the modern AV1 codec with minimal
-    quality loss. Typical use cases include compressing large TIFF stacks from
-    confocal microscopy and time-lapse experiments from hundreds of gigabytes to
-    manageable sizes, re-encoding MP4 files exported from CellProfiler, ImageJ/Fiji,
-    and microscope software with approximately 2x better compression at the same
+Description: Converts legacy microscopy video formats (H.264/H.265, AVI/MJPEG,
+    TIFF stacks) to the modern 'AV1' codec with minimal quality loss. Typical
+    use cases include compressing large TIFF stacks from confocal microscopy and
+    time-lapse experiments from hundreds of gigabytes to manageable sizes,
+    re-encoding MP4 files exported from 'CellProfiler', 'ImageJ'/'Fiji', and
+    microscope software with approximately 2x better compression at the same
     visual quality, and converting legacy AVI (MJPEG) and H.265 recordings to a
     single patent-free format suited for long-term archival. Automatically selects
-    the best available backend: GPU hardware acceleration via VAAPI (AMD/Intel) or
-    Vulkan (VK_KHR_VIDEO_ENCODE_AV1, when driver support is available), with
-    automatic fallback to CPU encoding through FFmpeg and SVT-AV1. Provides a
-    simple R API for batch conversion of entire experiment folders. Designed for
-    reproducible workflows: encoding parameters can be recorded alongside
-    experiment metadata.
+    the best available backend: GPU hardware acceleration via 'Vulkan'
+    'VK_KHR_VIDEO_ENCODE_AV1' (tested on AMD RDNA4; bundled headers, builds with
+    any 'Vulkan' SDK >= 1.3.275), with automatic fallback to CPU encoding through
+    'FFmpeg' and 'SVT-AV1'. Audio tracks are preserved automatically. Provides a
+    simple R API for batch conversion of entire experiment folders.
 Depends: R (>= 4.1.0)
 License: MIT + file LICENSE
 URL: https://github.com/Zabis13/AV1R
@@ -29,10 +28,10 @@ SystemRequirements: C++17, GNU make, FFmpeg (>= 4.4) with
         libavcodec/libavformat, libvulkan-dev (optional, for GPU
         encoding on Linux), Vulkan SDK (optional, for GPU encoding on
         Windows)
-Suggests: testthat (>= 3.0.0)
+Suggests: magick, testthat (>= 3.0.0)
 RoxygenNote: 7.3.3
 Config/testthat/edition: 3
 NeedsCompilation: yes
-Packaged: 2026-02-22 15:15:06 UTC; yuri
+Packaged: 2026-02-28 21:01:24 UTC; yuri
 Author: Yuri Baramykov [aut, cre]
 Maintainer: Yuri Baramykov <lbsbmsu@mail.ru>

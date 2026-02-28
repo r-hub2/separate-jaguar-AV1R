@@ -37,13 +37,14 @@ Finds all supported video files in \code{input_dir} and converts them to
 AV1. Output files are written to \code{output_dir} with the same base name
 and \code{.mp4} extension.
 }
+\details{
+When a folder contains only single-page TIFF images (e.g. a microscopy
+image sequence), they are automatically combined into a single video
+named after the input folder.
+}
 \examples{
 \dontrun{
-# Convert everything in a folder, auto-detect backend
-convert_folder("~/data/microscopy")
-
-# GPU encode to a separate output folder
-convert_folder("~/data/raw", "~/data/av1",
-               av1r_options(backend = "vaapi"))
+# Requires FFmpeg installed
+convert_folder("~/data/microscopy", file.path(tempdir(), "av1_output"))
 }
 }

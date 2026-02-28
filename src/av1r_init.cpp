@@ -7,20 +7,11 @@
 #include <stdexcept>
 #include <vector>
 #include <cstring>
+#include <cstdio>
+#include <unistd.h>
 #include "av1r_vulkan_ctx.h"
 
-static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT,
-    VkDebugUtilsMessageTypeFlagsEXT,
-    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-    void*)
-{
-    // Errors only — keep noise low in R console
-    if (pCallbackData && pCallbackData->pMessage) {
-        // Will be forwarded to R via Rf_warning in bindings layer
-    }
-    return VK_FALSE;
-}
+#include "av1r_stderr_suppress.h"
 
 VkInstance av1r_create_instance()
 {
@@ -40,7 +31,11 @@ VkInstance av1r_create_instance()
     ci.ppEnabledExtensionNames = extensions;
 
     VkInstance instance = VK_NULL_HANDLE;
-    VkResult res = vkCreateInstance(&ci, nullptr, &instance);
+    VkResult res;
+    {
+        StderrSuppressor quiet;
+        res = vkCreateInstance(&ci, nullptr, &instance);
+    }
     if (res != VK_SUCCESS) {
         throw std::runtime_error("vkCreateInstance failed: " + std::to_string(res));
     }

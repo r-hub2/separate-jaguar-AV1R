@@ -29,7 +29,7 @@ int              av1r_device_count(VkInstance);
 VkPhysicalDevice av1r_select_device(VkInstance, int);
 bool             av1r_device_supports_av1_encode(VkPhysicalDevice);
 void             av1r_device_name(VkPhysicalDevice, char*, int);
-VkDevice         av1r_create_logical_device(VkPhysicalDevice, uint32_t*);
+VkDevice         av1r_create_logical_device(VkPhysicalDevice, uint32_t*, uint32_t*);
 void             av1r_destroy_logical_device(VkDevice);
 VkFence          av1r_create_fence(VkDevice);
 VkCommandPool    av1r_create_command_pool(VkDevice, uint32_t);
@@ -106,12 +106,10 @@ extern "C" SEXP R_av1r_detect_backend(SEXP prefer) {
 // ============================================================================
 #ifdef AV1R_VULKAN_VIDEO_AV1
 
-// Forward declaration
-void av1r_vulkan_encode(Av1rVulkanCtx& ctx,
-                        const uint8_t* frames_nv12,
-                        int n_frames, int width, int height,
-                        int fps, int crf,
-                        std::vector<uint8_t>& out_bitstream);
+#include "av1r_stream_encoder.h"
+
+// Query minimum encode resolution (from av1r_encode_vulkan.cpp)
+void av1r_vulkan_query_min_extent(VkInstance, VkPhysicalDevice, uint32_t*, uint32_t*);
 
 // Minimal IVF muxer (AV1 raw bitstream → IVF container readable by ffmpeg)
 static void write_ivf_header(FILE* f, int width, int height, int fps, int n_frames) {
@@ -153,85 +151,141 @@ extern "C" SEXP R_av1r_vulkan_encode(SEXP r_input, SEXP r_output,
     width  = width  & ~1;
     height = height & ~1;
 
-    size_t frame_bytes = static_cast<size_t>(width * height * 3 / 2);
-
-    // ffmpeg pipe: decode to raw NV12
-    std::string cmd = std::string("ffmpeg -i \"") + input +
-        "\" -f rawvideo -pix_fmt nv12"
-        " -vf scale=" + std::to_string(width) + ":" + std::to_string(height) +
-        " -an - 2>/dev/null";
-
-    FILE* pipe = popen(cmd.c_str(), "r");
-    if (!pipe)
-        Rf_error("Failed to open ffmpeg pipe");
-
-    // Init Vulkan
+    // Init Vulkan first — we need physDevice to query min encode extent
     Av1rVulkanCtx ctx{};
     try {
         ctx.instance   = av1r_create_instance();
         ctx.physDevice = av1r_select_device(ctx.instance, 0);
-        uint32_t qfam  = UINT32_MAX;
-        ctx.device     = av1r_create_logical_device(ctx.physDevice, &qfam);
-        ctx.encodeQueue.queue_family_index = qfam;
-        vkGetDeviceQueue(ctx.device, qfam, 0, &ctx.encodeQueue.queue);
+        uint32_t encQfam  = UINT32_MAX;
+        uint32_t xferQfam = UINT32_MAX;
+        ctx.device     = av1r_create_logical_device(ctx.physDevice, &encQfam, &xferQfam);
+        ctx.encodeQueue.queue_family_index = encQfam;
+        vkGetDeviceQueue(ctx.device, encQfam, 0, &ctx.encodeQueue.queue);
+        ctx.transferQueue.queue_family_index = xferQfam;
+        vkGetDeviceQueue(ctx.device, xferQfam, 0, &ctx.transferQueue.queue);
         ctx.initialized = true;
     } catch (const std::exception& e) {
-        pclose(pipe);
         Rf_error("Vulkan init failed: %s", e.what());
     }
 
-    // Read frames from pipe, collect all NV12 data
-    std::vector<uint8_t> all_frames;
+    // Query minimum encode resolution and scale up if needed
+    uint32_t minW = 0, minH = 0;
+    av1r_vulkan_query_min_extent(ctx.instance, ctx.physDevice, &minW, &minH);
+    if ((uint32_t)width  < minW) width  = (int)minW;
+    if ((uint32_t)height < minH) height = (int)minH;
+    // Re-align after possible adjustment
+    width  = width  & ~1;
+    height = height & ~1;
+
+    size_t frame_bytes = static_cast<size_t>(width * height * 3 / 2);
+
+    // ffmpeg pipe: decode to raw NV12
+    // Image sequences (printf pattern with %) and TIFF need -framerate before -i
+    std::string inp(input);
+    bool is_image_seq = (inp.find('%') != std::string::npos) ||
+        (inp.size() >= 4 && (inp.compare(inp.size()-4, 4, ".tif") == 0 ||
+                              inp.compare(inp.size()-5, 5, ".tiff") == 0));
+
+    std::string cmd = "ffmpeg";
+    if (is_image_seq) cmd += " -framerate " + std::to_string(fps);
+    cmd += " -i \"" + inp + "\""
+           " -f rawvideo -pix_fmt nv12"
+           " -vf scale=" + std::to_string(width) + ":" + std::to_string(height) +
+           " -an - 2>/dev/null";
+
+    FILE* pipe = popen(cmd.c_str(), "r");
+    if (!pipe) {
+        av1r_destroy_logical_device(ctx.device);
+        av1r_destroy_instance(ctx.instance);
+        Rf_error("Failed to open ffmpeg pipe");
+    }
+
+    // Init streaming encoder
+    Av1rStreamEncoder* se = av1r_vulkan_stream_new();
+    try {
+        av1r_vulkan_stream_init(ctx, se, width, height, fps, crf);
+    } catch (const std::exception& e) {
+        av1r_vulkan_stream_delete(se);
+        pclose(pipe);
+        av1r_destroy_logical_device(ctx.device);
+        av1r_destroy_instance(ctx.instance);
+        Rf_error("Vulkan encoder init failed: %s", e.what());
+    }
+
+    // Open IVF output (write header with 0 frames, update later)
+    std::string ivf_tmp = std::string(output) + ".ivf";
+    FILE* fout = fopen(ivf_tmp.c_str(), "wb");
+    if (!fout) {
+        av1r_vulkan_stream_finish(se);
+        av1r_vulkan_stream_delete(se);
+        pclose(pipe);
+        av1r_destroy_logical_device(ctx.device);
+        av1r_destroy_instance(ctx.instance);
+        Rf_error("Cannot write output IVF: %s", ivf_tmp.c_str());
+    }
+    write_ivf_header(fout, width, height, fps, 0);
+
+    // Stream: read one frame → encode → write IVF packet → repeat
     std::vector<uint8_t> frame_buf(frame_bytes);
+    std::vector<uint8_t> packet;
     int n_frames = 0;
+    bool encode_error = false;
+    std::string error_msg;
 
     while (true) {
         size_t got = fread(frame_buf.data(), 1, frame_bytes, pipe);
         if (got != frame_bytes) break;
-        all_frames.insert(all_frames.end(), frame_buf.begin(), frame_buf.end());
+
+        try {
+            av1r_vulkan_stream_encode(se, frame_buf.data(), n_frames, packet);
+        } catch (const std::exception& e) {
+            encode_error = true;
+            error_msg = e.what();
+            break;
+        }
+
+        write_ivf_frame(fout, packet.data(), packet.size(),
+                        static_cast<uint64_t>(n_frames));
         n_frames++;
+
+        if (n_frames % 100 == 0)
+            REprintf("\r  [vulkan] %d frames encoded", n_frames);
     }
+    if (n_frames > 0) REprintf("\r  [vulkan] %d frames encoded\n", n_frames);
+
     pclose(pipe);
+    av1r_vulkan_stream_finish(se);
+    av1r_vulkan_stream_delete(se);
 
-    if (n_frames == 0) {
-        av1r_destroy_logical_device(ctx.device);
-        av1r_destroy_instance(ctx.instance);
-        Rf_error("No frames decoded from input");
-    }
-
-    // GPU encode
-    std::vector<uint8_t> bitstream;
-    std::vector<size_t>  frame_sizes;
-    try {
-        av1r_vulkan_encode(ctx, all_frames.data(), n_frames,
-                           width, height, fps, crf, bitstream, &frame_sizes);
-    } catch (const std::exception& e) {
-        av1r_destroy_logical_device(ctx.device);
-        av1r_destroy_instance(ctx.instance);
-        Rf_error("Vulkan encode failed: %s", e.what());
-    }
+    // Update IVF header with actual frame count
+    fseek(fout, 24, SEEK_SET);
+    uint8_t fc[4] = {
+        static_cast<uint8_t>(n_frames & 0xFF),
+        static_cast<uint8_t>((n_frames >> 8) & 0xFF),
+        static_cast<uint8_t>((n_frames >> 16) & 0xFF),
+        static_cast<uint8_t>((n_frames >> 24) & 0xFF)
+    };
+    fwrite(fc, 1, 4, fout);
+    fclose(fout);
 
     av1r_destroy_logical_device(ctx.device);
     av1r_destroy_instance(ctx.instance);
 
-    // Write IVF output (ffmpeg can wrap IVF → MP4)
-    std::string ivf_tmp = std::string(output) + ".ivf";
-    FILE* fout = fopen(ivf_tmp.c_str(), "wb");
-    if (!fout) Rf_error("Cannot write output IVF: %s", ivf_tmp.c_str());
-
-    write_ivf_header(fout, width, height, fps, n_frames);
-
-    const uint8_t* ptr = bitstream.data();
-    for (int i = 0; i < static_cast<int>(frame_sizes.size()); i++) {
-        size_t sz = frame_sizes[static_cast<size_t>(i)];
-        write_ivf_frame(fout, ptr, sz, static_cast<uint64_t>(i));
-        ptr += sz;
+    if (encode_error) {
+        remove(ivf_tmp.c_str());
+        Rf_error("Vulkan encode failed: %s", error_msg.c_str());
     }
-    fclose(fout);
+
+    if (n_frames == 0) {
+        remove(ivf_tmp.c_str());
+        Rf_error("No frames decoded from input");
+    }
 
     // Wrap IVF → MP4 via ffmpeg
     std::string wrap_cmd = std::string("ffmpeg -y -i \"") + ivf_tmp +
-        "\" -c:v copy \"" + output + "\" 2>/dev/null";
+        "\" -i \"" + input + "\" -map 0:v -map 1:a? -c:v copy -c:a copy"
+        " -movflags +faststart \"" +
+        output + "\" 2>/dev/null";
     int ret = system(wrap_cmd.c_str());
     remove(ivf_tmp.c_str());
 

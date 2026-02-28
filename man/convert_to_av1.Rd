@@ -26,14 +26,11 @@ device is found, otherwise CPU via FFmpeg (\code{libsvtav1} or
 \code{libaom-av1}).
 }
 \examples{
+# List available options
+str(av1r_options())
+
 \dontrun{
-# Auto-detect backend (GPU if available, else CPU)
-convert_to_av1("recording.mp4", "recording_av1.mp4")
-
-# Force CPU encoding
-convert_to_av1("stack.tif", "stack.mp4", av1r_options(crf = 20, backend = "cpu"))
-
-# Force GPU encoding (requires Vulkan AV1 support)
-convert_to_av1("recording.mp4", "out.mp4", av1r_options(backend = "vulkan"))
+# Requires FFmpeg installed
+convert_to_av1("recording.mp4", file.path(tempdir(), "recording_av1.mp4"))
 }
 }

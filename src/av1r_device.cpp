@@ -8,6 +8,8 @@
 #ifdef AV1R_USE_VULKAN
 
 #include <vulkan/vulkan.h>
+#include "vk_video/vulkan_video_encode_av1_khr.h"
+#include "av1r_stderr_suppress.h"
 #include <cstring>
 #include <vector>
 #include <stdexcept>
@@ -16,6 +18,7 @@
 int av1r_device_count(VkInstance instance)
 {
     uint32_t count = 0;
+    StderrSuppressor quiet;
     vkEnumeratePhysicalDevices(instance, &count, nullptr);
     return static_cast<int>(count);
 }
@@ -30,13 +33,19 @@ int av1r_device_count(VkInstance instance)
 VkPhysicalDevice av1r_select_device(VkInstance instance, int device_index)
 {
     uint32_t count = 0;
-    vkEnumeratePhysicalDevices(instance, &count, nullptr);
+    {
+        StderrSuppressor quiet;
+        vkEnumeratePhysicalDevices(instance, &count, nullptr);
+    }
     if (count == 0) {
         throw std::runtime_error("No Vulkan-capable GPUs found");
     }
 
     std::vector<VkPhysicalDevice> devs(count);
-    vkEnumeratePhysicalDevices(instance, &count, devs.data());
+    {
+        StderrSuppressor quiet;
+        vkEnumeratePhysicalDevices(instance, &count, devs.data());
+    }
 
     if (device_index >= 0) {
         // Явный выбор по индексу (ggmlR строки 4355-4358)

@@ -10,10 +10,12 @@
 #'   \code{width}, \code{height}, \code{size_mb}.
 #'
 #' @examples
-#' \dontrun{
-#' info <- read_tiff_stack("confocal_z_series.tif")
-#' cat(info$n_frames, "frames,", info$size_mb, "MB\n")
-#' }
+#' # Create a small temporary TIFF and inspect it
+#' tmp <- tempfile(fileext = ".tif")
+#' writeBin(raw(1024), tmp)
+#' info <- read_tiff_stack(tmp)
+#' str(info)
+#' unlink(tmp)
 #' @export
 read_tiff_stack <- function(path) {
   if (!file.exists(path)) stop("File not found: ", path)

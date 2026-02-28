@@ -15,20 +15,28 @@
 #' @return Invisibly returns 0L on success. Stops with an error on failure.
 #'
 #' @examples
+#' # List available options
+#' str(av1r_options())
+#'
 #' \dontrun{
-#' # Auto-detect backend (GPU if available, else CPU)
-#' convert_to_av1("recording.mp4", "recording_av1.mp4")
-#'
-#' # Force CPU encoding
-#' convert_to_av1("stack.tif", "stack.mp4", av1r_options(crf = 20, backend = "cpu"))
-#'
-#' # Force GPU encoding (requires Vulkan AV1 support)
-#' convert_to_av1("recording.mp4", "out.mp4", av1r_options(backend = "vulkan"))
+#' # Requires FFmpeg installed
+#' convert_to_av1("recording.mp4", file.path(tempdir(), "recording_av1.mp4"))
 #' }
 #' @export
 convert_to_av1 <- function(input, output, options = av1r_options()) {
-  if (!file.exists(input)) stop("Input file not found: ", input)
+  is_seq <- grepl("%", input, fixed = TRUE)
+  if (!is_seq && !file.exists(input)) stop("Input file not found: ", input)
   check_ffmpeg()
+
+  # Multi-page TIFF: extract pages to temp PNG sequence via magick
+  # Skip if input is already an image sequence pattern (contains %)
+  is_tiff <- !is_seq && grepl("\\.tiff?$", input, ignore.case = TRUE)
+  tiff_tmpdir <- NULL
+  if (is_tiff) {
+    tiff_tmpdir <- tempfile("av1r_tiff_")
+    input <- .tiff_to_png_sequence(input, tiff_tmpdir)
+    on.exit(unlink(tiff_tmpdir, recursive = TRUE), add = TRUE)
+  }
 
   bk <- if (options$backend == "auto") detect_backend() else options$backend
 
@@ -211,6 +219,28 @@ convert_to_av1 <- function(input, output, options = av1r_options()) {
     stop("Could not read video dimensions from: ", input)
 
   list(width = width, height = height, fps = fps)
+}
+
+# Internal: extract multi-page TIFF to PNG sequence via magick
+# Returns ffmpeg-compatible input path (printf pattern)
+.tiff_to_png_sequence <- function(tiff_path, tmpdir) {
+  if (!requireNamespace("magick", quietly = TRUE))
+    stop("Package 'magick' is required for multi-page TIFF input.\n",
+         "  Install: install.packages(\"magick\")")
+
+  dir.create(tmpdir, recursive = TRUE, showWarnings = FALSE)
+
+  img <- magick::image_read(tiff_path)
+  n <- length(img)
+  message(sprintf("AV1R: extracting %d frames from TIFF stack...", n))
+
+  for (i in seq_len(n)) {
+    out_file <- file.path(tmpdir, sprintf("frame%06d.png", i))
+    magick::image_write(img[i], out_file, format = "png")
+  }
+
+  # Return printf pattern for ffmpeg
+  file.path(tmpdir, "frame%06d.png")
 }
 
 # Pick the best available AV1 encoder in the installed ffmpeg

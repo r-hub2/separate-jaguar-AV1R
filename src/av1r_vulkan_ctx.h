@@ -38,6 +38,7 @@ struct Av1rVulkanCtx {
     VkPhysicalDevice physDevice  = VK_NULL_HANDLE;
     VkDevice         device      = VK_NULL_HANDLE;
     Av1rQueue        encodeQueue;
+    Av1rQueue        transferQueue;  // for vkCmdCopyBufferToImage (needs TRANSFER bit)
     VkFence          fence       = VK_NULL_HANDLE;
     bool             initialized = false;
 
@@ -64,7 +65,8 @@ void             av1r_device_name(VkPhysicalDevice dev, char* buf, int buf_len);
 // av1r_memory.cpp
 // ============================================================================
 VkDevice av1r_create_logical_device(VkPhysicalDevice phys,
-                                    uint32_t* encode_qfamily_out);
+                                    uint32_t* encode_qfamily_out,
+                                    uint32_t* transfer_qfamily_out = nullptr);
 void     av1r_destroy_logical_device(VkDevice device);
 
 // Buffer management (адаптировано из ggmlR строки 2402-2503)
