@@ -8,7 +8,7 @@ convert_folder(
   input_dir,
   output_dir = input_dir,
   options = av1r_options(),
-  ext = c("mp4", "avi", "mkv", "mov", "tif", "tiff"),
+  ext = c("mp4", "avi", "mkv", "mov", "flv", "mpg", "mpeg", "webm", "tif", "tiff"),
   skip_existing = TRUE
 )
 }
@@ -22,7 +22,7 @@ exist. Defaults to \code{input_dir}.}
 \code{av1r_options()}.}
 
 \item{ext}{Character vector of input extensions to process.
-Default: \code{c("mp4","avi","mkv","mov","tif","tiff")}.}
+Default: \code{c("mp4","avi","mkv","mov","flv","mpg","mpeg","webm","tif","tiff")}.}
 
 \item{skip_existing}{If \code{TRUE} (default), skip files where the output
 already exists.}

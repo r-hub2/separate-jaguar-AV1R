@@ -34,6 +34,33 @@ void       av1r_buffer_destroy(VkDevice, Av1rBuffer&);
 // Вспомогательные функции
 // ============================================================================
 
+// CRF (0-63) → AV1 qIndex (0-255) nonlinear mapping.
+// AV1 qIndex 0 = lossless, 255 = worst quality.
+// Linear crf*4 gives qIndex 112 at CRF 28 which is too low for real compression.
+// This LUT approximates aomenc --cq-level behaviour.
+static uint32_t crf_to_qindex(uint32_t crf)
+{
+    struct Point { uint32_t crf; uint32_t qi; };
+    static const Point lut[] = {
+        { 0,   0}, {10,  60}, {20, 120}, {28, 175},
+        {35, 210}, {50, 240}, {63, 255}
+    };
+    static const int N = sizeof(lut) / sizeof(lut[0]);
+
+    if (crf == 0)   return 0;
+    if (crf >= 63)  return 255;
+
+    for (int i = 1; i < N; i++) {
+        if (crf <= lut[i].crf) {
+            uint32_t dc = crf - lut[i-1].crf;
+            uint32_t dr = lut[i].crf - lut[i-1].crf;
+            uint32_t dq = lut[i].qi  - lut[i-1].qi;
+            return lut[i-1].qi + dc * dq / dr;
+        }
+    }
+    return 255;
+}
+
 // Найти тип памяти (из av1r_memory.cpp паттерна)
 static uint32_t find_mem_type(VkPhysicalDevice phys,
                                uint32_t type_bits,
@@ -215,7 +242,9 @@ static void createVideoSession(Av1rEncoder& enc, int crf)
         throw std::runtime_error("vkGetPhysicalDeviceVideoCapabilitiesKHR failed: " +
                                  std::to_string(res));
 
-    // Use DISABLED mode (CQP) — driver controls quality via constantQIndex per frame
+    // DISABLED mode (CQP): quality via constantQIndex per frame
+    // NOTE: on RADV, VBR is reported but broken (produces huge files).
+    //       DISABLED + constantQIndex is the only working mode.
     if (encodeCaps.rateControlModes & VK_VIDEO_ENCODE_RATE_CONTROL_MODE_DISABLED_BIT_KHR)
         enc.chosenRateControlMode = VK_VIDEO_ENCODE_RATE_CONTROL_MODE_DISABLED_BIT_KHR;
     else
@@ -566,14 +595,14 @@ static void initRateControl(Av1rEncoder& enc, VkCommandBuffer cmd)
     enc.rateControlLayer.sType               = VK_STRUCTURE_TYPE_VIDEO_ENCODE_RATE_CONTROL_LAYER_INFO_KHR;
     enc.rateControlLayer.frameRateNumerator  = enc.fps;
     enc.rateControlLayer.frameRateDenominator = 1;
-    enc.rateControlLayer.averageBitrate      = 2000000;  // 2 Mbps
-    enc.rateControlLayer.maxBitrate          = 4000000;  // 4 Mbps
+    enc.rateControlLayer.averageBitrate      = 5000000;  // 5 Mbps
+    enc.rateControlLayer.maxBitrate          = 20000000; // 20 Mbps
 
     // AV1 rate control info (аналог VkVideoEncodeH264RateControlInfoKHR)
     enc.av1RateControlInfo.sType          = VK_STRUCTURE_TYPE_VIDEO_ENCODE_AV1_RATE_CONTROL_INFO_KHR;
     enc.av1RateControlInfo.flags          = VK_VIDEO_ENCODE_AV1_RATE_CONTROL_REGULAR_GOP_BIT_KHR;
-    enc.av1RateControlInfo.gopFrameCount  = enc.fps * 10;
-    enc.av1RateControlInfo.keyFramePeriod = enc.fps * 10;
+    enc.av1RateControlInfo.gopFrameCount  = 16;
+    enc.av1RateControlInfo.keyFramePeriod = 16;
     enc.av1RateControlInfo.temporalLayerCount = 1;
 
     enc.rateControlInfo.sType               = VK_STRUCTURE_TYPE_VIDEO_ENCODE_RATE_CONTROL_INFO_KHR;
@@ -701,8 +730,7 @@ static void uploadNV12Frame(Av1rEncoder& enc,
 // ============================================================================
 static void encodeOneFrame(Av1rEncoder& enc, VkCommandBuffer cmd)
 {
-    // Keyframe every 10 seconds (fps-dependent)
-    const uint32_t GOP_LENGTH   = enc.fps * 10;
+    const uint32_t GOP_LENGTH   = 16;
     const uint32_t gopIdx       = enc.frameCount % GOP_LENGTH;
     const bool     isKeyFrame   = (gopIdx == 0);
     const uint32_t querySlotId  = 0;
@@ -753,7 +781,7 @@ static void encodeOneFrame(Av1rEncoder& enc, VkCommandBuffer cmd)
 
     // Reference info — предыдущий кадр из DPB refSlot (inter only)
     // frame_type must match what was actually stored: frame 0 = KEY, rest = INTER
-    const uint32_t prevGopIdx = (enc.frameCount - 1) % (enc.fps * 10);
+    const uint32_t prevGopIdx = (enc.frameCount - 1) % 16;
     StdVideoEncodeAV1ReferenceInfo stdRefInfo{};
     memset(&stdRefInfo, 0, sizeof(stdRefInfo));
     stdRefInfo.frame_type = (prevGopIdx == 0) ? STD_VIDEO_AV1_FRAME_TYPE_KEY
@@ -829,8 +857,7 @@ static void encodeOneFrame(Av1rEncoder& enc, VkCommandBuffer cmd)
     // Quantization
     StdVideoAV1Quantization quantization{};
     memset(&quantization, 0, sizeof(quantization));
-    uint32_t qIdx = enc.crf * 4;
-    if (qIdx > 255) qIdx = 255;
+    uint32_t qIdx = crf_to_qindex(enc.crf);
     quantization.base_q_idx = static_cast<uint8_t>(qIdx);
 
     // Loop filter
@@ -903,9 +930,7 @@ static void encodeOneFrame(Av1rEncoder& enc, VkCommandBuffer cmd)
     av1PicInfo.rateControlGroup   = isKeyFrame
         ? VK_VIDEO_ENCODE_AV1_RATE_CONTROL_GROUP_INTRA_KHR
         : VK_VIDEO_ENCODE_AV1_RATE_CONTROL_GROUP_PREDICTIVE_KHR;
-    // CRF 0-63 → QIndex 0-252 (AV1 quantizer range 0-255)
-    uint32_t qIndex = enc.crf * 4;
-    if (qIndex > 255) qIndex = 255;
+    uint32_t qIndex = crf_to_qindex(enc.crf);
     av1PicInfo.constantQIndex     = qIndex;
     av1PicInfo.pStdPictureInfo    = &stdPicInfo;
 
@@ -977,6 +1002,8 @@ static size_t getOutputPacket(Av1rEncoder& enc, std::vector<uint8_t>& out)
 // ============================================================================
 static void destroyEncoder(Av1rEncoder& enc)
 {
+    vkDeviceWaitIdle(enc.device);
+
     if (enc.bitstreamPtr)
         vkUnmapMemory(enc.device, enc.bitstreamMemory);
     if (enc.bitstreamBuf != VK_NULL_HANDLE)
@@ -1143,12 +1170,15 @@ void av1r_vulkan_encode_frame(
     av1r_wait_fence(se.enc.device, se.enc.encodeFence);
 
     out_packet.clear();
-    // Prepend sequence header OBU before first frame
-    if (se.enc.seqHeaderPending && !se.enc.seqHeaderData.empty()) {
+    // Prepend sequence header OBU before every keyframe (not just the first).
+    // AV1 decoders need the sequence header to start decoding at any keyframe,
+    // which is required for seek / random access to work.
+    const uint32_t GOP_LEN = 16;
+    bool isKey = (se.enc.frameCount % GOP_LEN == 0);
+    if (isKey && !se.enc.seqHeaderData.empty()) {
         out_packet.insert(out_packet.end(),
                           se.enc.seqHeaderData.begin(),
                           se.enc.seqHeaderData.end());
-        se.enc.seqHeaderPending = false;
     }
     getOutputPacket(se.enc, out_packet);
 

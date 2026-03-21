@@ -64,7 +64,6 @@ inline Av1rVkVideoFuncs& av1r_vk_video_funcs() {
 
 inline void av1r_load_vk_video_funcs(VkInstance instance, VkDevice device) {
     auto& f = av1r_vk_video_funcs();
-    if (f.loaded) return;
 
     auto getI = [&](const char* name) -> PFN_vkVoidFunction {
         auto p = vkGetInstanceProcAddr(instance, name);

@@ -268,6 +268,7 @@ extern "C" SEXP R_av1r_vulkan_encode(SEXP r_input, SEXP r_output,
     fwrite(fc, 1, 4, fout);
     fclose(fout);
 
+    vkDeviceWaitIdle(ctx.device);
     av1r_destroy_logical_device(ctx.device);
     av1r_destroy_instance(ctx.instance);
 

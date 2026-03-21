@@ -1,6 +1,6 @@
 # Internal utility functions
 
-# Проверить что ffmpeg бинарник доступен (не -dev пакеты)
+# Check that ffmpeg binary is available (not -dev packages)
 check_ffmpeg <- function() {
   ffmpeg <- Sys.which("ffmpeg")
   if (nchar(ffmpeg) == 0L) {
@@ -13,7 +13,7 @@ check_ffmpeg <- function() {
   invisible(ffmpeg)
 }
 
-# Форматировать байты
+# Format bytes to human-readable string
 fmt_bytes <- function(x) {
   units <- c("B", "KB", "MB", "GB", "TB")
   i <- 1L

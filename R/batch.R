@@ -14,7 +14,7 @@
 #' @param options    An \code{av1r_options} list. Defaults to
 #'   \code{av1r_options()}.
 #' @param ext        Character vector of input extensions to process.
-#'   Default: \code{c("mp4","avi","mkv","mov","tif","tiff")}.
+#'   Default: \code{c("mp4","avi","mkv","mov","flv","mpg","mpeg","webm","tif","tiff")}.
 #' @param skip_existing If \code{TRUE} (default), skip files where the output
 #'   already exists.
 #'
@@ -31,7 +31,7 @@
 convert_folder <- function(input_dir,
                            output_dir    = input_dir,
                            options       = av1r_options(),
-                           ext           = c("mp4", "avi", "mkv", "mov", "tif", "tiff"),
+                           ext           = c("mp4", "avi", "mkv", "mov", "flv", "mpg", "mpeg", "webm", "tif", "tiff"),
                            skip_existing = TRUE) {
   if (!dir.exists(input_dir))
     stop("Input directory not found: ", input_dir)
@@ -50,7 +50,7 @@ convert_folder <- function(input_dir,
                                 status=character(), message=character())))
   }
 
-  # Check if all files are single-page TIFFs → treat as image sequence
+  # Check if all files are single-page TIFFs -> treat as image sequence
   tiff_files <- grep("\\.(tiff?|TIFF?)$", files, value = TRUE)
   if (length(tiff_files) == length(files) && length(files) > 1) {
     return(.convert_tiff_sequence(tiff_files, input_dir, output_dir,
@@ -77,12 +77,18 @@ convert_folder <- function(input_dir,
     status  <- "ok"
     msg     <- ""
 
-    tryCatch(
-      convert_to_av1(inp, out, options),
-      error = function(e) {
-        status  <<- "error"
-        msg     <<- conditionMessage(e)
-        message("  ERROR: ", msg)
+    withCallingHandlers(
+      tryCatch(
+        convert_to_av1(inp, out, options),
+        error = function(e) {
+          status  <<- "error"
+          msg     <<- conditionMessage(e)
+          message("  ERROR: ", msg)
+        }
+      ),
+      warning = function(w) {
+        msg <<- conditionMessage(w)
+        invokeRestart("muffleWarning")
       }
     )
 
@@ -94,7 +100,12 @@ convert_folder <- function(input_dir,
   n_ok  <- sum(df$status == "ok")
   n_err <- sum(df$status == "error")
   n_skp <- sum(df$status == "skipped")
+  n_bloat <- sum(grepl("larger than input", df$message))
   message(sprintf("\nAV1R batch done: %d ok, %d skipped, %d errors", n_ok, n_skp, n_err))
+  if (n_bloat > 0) {
+    message(sprintf("  %d file(s) re-encoded from VP9/AV1 -- output may be larger than input",
+                     n_bloat))
+  }
 
   invisible(df)
 }

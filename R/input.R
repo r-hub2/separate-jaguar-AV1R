@@ -1,6 +1,6 @@
 #' Read a TIFF stack and return basic metadata
 #'
-#' Does not load pixel data into R — only inspects the file.
+#' Does not load pixel data into R -- only inspects the file.
 #' Useful for checking frame count and dimensions before encoding.
 #'
 #' @param path Path to a multi-page TIFF file or printf-pattern

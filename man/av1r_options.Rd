@@ -9,11 +9,14 @@ av1r_options(
   preset = 8L,
   threads = 0L,
   bitrate = NULL,
+  tiff_crf = 5L,
+  tiff_scale = NULL,
+  verbose = TRUE,
   backend = "auto"
 )
 }
 \arguments{
-\item{crf}{Constant Rate Factor: 0 (lossless) to 63 (worst). Default 28.
+\item{crf}{Constant Rate Factor: 0 (best) to 63 (worst). Default 28.
 Lower = better quality, larger file. Used as fallback when \code{bitrate}
 is \code{NULL} and input bitrate cannot be detected.}
 
@@ -26,9 +29,23 @@ Default 8 (good balance for microscopy batch jobs).}
 \code{NULL} (default) = auto-detect from input (55\% of source bitrate
 for VAAPI, CRF for CPU).}
 
-\item{backend}{\code{"auto"} (best GPU if available, else CPU),
-\code{"vulkan"} (Vulkan AV1), \code{"vaapi"} (VAAPI AV1, AMD/Intel),
-or \code{"cpu"}.}
+\item{tiff_crf}{CRF for TIFF/image sequence input. Default 5
+(near-lossless, suitable for microscopy data). Overrides \code{crf}
+when input is TIFF or image sequence.}
+
+\item{tiff_scale}{Scale factor or target size for TIFF/image input.
+\code{NULL} (default) = no scaling (only auto-scale to meet hardware
+minimum). A single number = multiplier (e.g. \code{2} doubles both
+dimensions). A vector \code{c(width, height)} = target bounding box
+(image is scaled proportionally to fit inside, preserving aspect ratio).}
+
+\item{verbose}{Logical. If \code{TRUE} (default), print informational
+messages about encoding decisions (e.g. TIFF CRF override).}
+
+\item{backend}{\code{"auto"} (best available: vaapi > vulkan > cpu),
+\code{"vaapi"} (VAAPI AV1, AMD/Intel),
+\code{"vulkan"} (Vulkan AV1),
+or \code{"cpu"} (SVT-AV1 via ffmpeg).}
 }
 \value{
 A named list of encoding parameters.

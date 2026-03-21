@@ -7,7 +7,7 @@
 convert_to_av1(input, output, options = av1r_options())
 }
 \arguments{
-\item{input}{Path to input file. Supported: .mp4, .avi, .mkv, .mov,
+\item{input}{Path to input file. Supported: .mp4, .avi, .mkv, .mov, .flv, .mpg, .mpeg, .webm,
 .tif/.tiff (multi-page), or printf pattern like \code{"frame\%04d.tif"}.}
 
 \item{output}{Path to output file (.mp4 or .mkv).}
@@ -22,8 +22,7 @@ Invisibly returns 0L on success. Stops with an error on failure.
 Converts biological microscopy video files (MP4/H.264, H.265, AVI/MJPEG)
 or TIFF stacks to AV1 format. Automatically selects the best available
 backend: Vulkan GPU (\code{VK_KHR_VIDEO_ENCODE_AV1}) when a compatible
-device is found, otherwise CPU via FFmpeg (\code{libsvtav1} or
-\code{libaom-av1}).
+device is found, otherwise CPU via FFmpeg (\code{libsvtav1}).
 }
 \examples{
 # List available options

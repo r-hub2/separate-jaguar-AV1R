@@ -1,8 +1,14 @@
 library(AV1R)
 
-input <- "/mnt/Data2/DS_projects/AV_test/test.mp4"
+input <- "/mnt/Data2/DS_projects/AV_test/DuckTales S01E01 Не сдавать корабль!.avi"
 output     <- "/mnt/Data2/DS_projects/AV_test/test_av1_gpu.mp4"
 
+
+
+
+#convert_folder("/mnt/Data2/Share/Утиные Истории - Duck Tales/", file.path(tempdir(), "av1_output"))
+#input <- "/mnt/Data2/Share/Утиные Истории - Duck Tales/"
+#output     <- "/mnt/Data2/DS_projects/AV_test/test_av1_gpu.mp4"
 
 # Check what GPU backend is available
 bk <- detect_backend()

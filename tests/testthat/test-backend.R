@@ -61,3 +61,42 @@ test_that("detect_backend rejects invalid prefer value", {
   expect_error(detect_backend("cuda"))
   expect_error(detect_backend("amf"))
 })
+
+test_that("av1r_status returns a valid backend string", {
+  result <- invisible(capture.output(res <- av1r_status()))
+  expect_true(res %in% c("vulkan", "vaapi", "cpu"))
+})
+
+test_that("av1r_status prints backend info", {
+  expect_output(av1r_status(), "backend:")
+})
+
+test_that(".has_ffmpeg_encoder detects libsvtav1", {
+  skip_if_not(nchar(Sys.which("ffmpeg")) > 0, "ffmpeg not installed")
+  result <- AV1R:::.has_ffmpeg_encoder("libsvtav1")
+  expect_type(result, "logical")
+  expect_length(result, 1)
+})
+
+test_that(".has_ffmpeg_encoder returns FALSE for nonexistent encoder", {
+  skip_if_not(nchar(Sys.which("ffmpeg")) > 0, "ffmpeg not installed")
+  expect_false(AV1R:::.has_ffmpeg_encoder("nonexistent_encoder_xyz"))
+})
+
+test_that(".has_ffmpeg_encoder returns FALSE when ffmpeg is missing", {
+  withr::with_path("", action = "replace", {
+    expect_false(AV1R:::.has_ffmpeg_encoder("libsvtav1"))
+  })
+})
+
+test_that(".vaapi_av1_available returns logical", {
+  result <- AV1R:::.vaapi_av1_available()
+  expect_type(result, "logical")
+  expect_length(result, 1)
+})
+
+test_that(".vaapi_av1_available returns FALSE when ffmpeg is missing", {
+  withr::with_path("", action = "replace", {
+    expect_false(AV1R:::.vaapi_av1_available())
+  })
+})

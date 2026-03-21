@@ -12,7 +12,7 @@ convert_to_av1(
   input  = input,
   output = output,
   options = av1r_options(
-    crf     = 10,
+    crf     = 3,
     backend = "auto"
   )
 )
