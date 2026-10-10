@@ -18,3 +18,7 @@ Priority order: \code{"vaapi"} (VAAPI AV1 GPU via ffmpeg, best
 speed/quality ratio) > \code{"vulkan"} (Vulkan AV1 GPU, fastest but
 CQP only) > \code{"cpu"} (SVT-AV1 via ffmpeg).
 }
+\examples{
+detect_backend()
+detect_backend(prefer = "cpu")
+}

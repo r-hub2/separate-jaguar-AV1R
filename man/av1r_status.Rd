@@ -12,3 +12,6 @@ Invisibly returns the active backend string.
 \description{
 Prints the active encoding backend and available GPU/CPU capabilities.
 }
+\examples{
+av1r_status()
+}

@@ -13,3 +13,6 @@ Character vector of device names. Devices supporting
 \description{
 List Vulkan-capable GPU devices
 }
+\examples{
+vulkan_devices()
+}

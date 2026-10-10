@@ -12,3 +12,6 @@ vulkan_available()
 \description{
 Check Vulkan AV1 availability
 }
+\examples{
+vulkan_available()
+}

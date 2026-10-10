@@ -152,6 +152,13 @@ FFV1 archive. Install it from your distribution if packaged
 [Vulkan SDK](https://vulkan.lunarg.com/sdk/home); `configure` also looks in
 `$GLSLC` and `$VULKAN_SDK/bin`. Without it the CPU encoder is used.
 
+If the Vulkan SDK was installed from the LunarG tarball, source its
+environment in the same shell before installing:
+
+```bash
+source /path/to/vulkan-sdk/<version>/setup-env.sh
+```
+
 ## TIFF stacks
 
 TIFF stacks use near-lossless CRF 5 by default (`tiff_crf`). Output resolution can be controlled via `tiff_scale`.

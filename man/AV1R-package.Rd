@@ -6,7 +6,7 @@
 \alias{AV1R-package}
 \title{AV1R: 'AV1' Video Encoding for Biological Microscopy Data}
 \description{
-Converts legacy microscopy video formats (H.264/H.265, AVI/MJPEG, TIFF stacks) to the modern 'AV1' codec with minimal quality loss. Typical use cases include compressing large TIFF stacks from confocal microscopy and time-lapse experiments from hundreds of gigabytes to manageable sizes, re-encoding MP4 files exported from 'CellProfiler', 'ImageJ'/'Fiji', and microscope software with approximately 2x better compression at the same visual quality, and converting legacy AVI (MJPEG) and H.265 recordings to a single patent-free format suited for long-term archival. Automatically selects the best available backend: GPU hardware acceleration via 'Vulkan' 'VK_KHR_VIDEO_ENCODE_AV1' or 'VAAPI' (tested on AMD RDNA4; bundled headers, builds with any 'Vulkan' SDK >= 1.3.275), with automatic fallback to CPU encoding through 'FFmpeg' and 'SVT-AV1'. User controls quality via a single CRF parameter; each backend adapts automatically (CPU and Vulkan use CRF directly, VAAPI targets 55 percent of input bitrate). TIFF stacks use near-lossless CRF 5 by default, with optional proportional scaling via tiff_scale (multiplier or bounding box, aspect ratio always preserved). Small frames are automatically scaled up to meet hardware encoder minimums. Audio tracks are preserved automatically. Provides a simple R API for batch conversion of entire experiment folders.
+Converts microscopy video and image data (H.264/H.265, AVI/MJPEG, TIFF stacks) to the 'AV1' codec for compact storage, and archives 16-bit image stacks and videos losslessly in the 'FFV1' format. Encoding runs on the GPU via 'Vulkan' or 'VAAPI' when available and falls back to the CPU through 'FFmpeg' and 'SVT-AV1'. Whole experiment folders can be converted at once.
 }
 \seealso{
 Useful links:
@@ -18,5 +18,11 @@ Useful links:
 }
 \author{
 \strong{Maintainer}: Yuri Baramykov \email{lbsbmsu@mail.ru} (\href{https://orcid.org/0009-0000-7627-4217}{ORCID})
+
+Other contributors:
+\itemize{
+  \item The Khronos Group Inc. [copyright holder]
+  \item FFmpeg developers [copyright holder]
+}
 
 }
