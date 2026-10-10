@@ -14,6 +14,7 @@
 #include <cstring>
 #include <cstdio>
 #include "av1r_vulkan_ctx.h"
+#include "av1r_stderr_suppress.h"
 
 // ============================================================================
 // Поиск типа памяти GPU
@@ -133,7 +134,11 @@ VkDevice av1r_create_logical_device(VkPhysicalDevice phys,
     dci.ppEnabledExtensionNames = dev_exts.data();
 
     VkDevice device = VK_NULL_HANDLE;
-    VkResult res = vkCreateDevice(phys, &dci, nullptr, &device);
+    VkResult res;
+    {
+        StderrSuppressor quiet;
+        res = vkCreateDevice(phys, &dci, nullptr, &device);
+    }
     if (res != VK_SUCCESS) {
         throw std::runtime_error("vkCreateDevice failed: " + std::to_string(res));
     }

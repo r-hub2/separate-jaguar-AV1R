@@ -25,7 +25,7 @@ test_that(".ffmpeg_video_info returns correct structure on real video", {
   info <- AV1R:::.ffmpeg_video_info(tmp)
 
   expect_type(info, "list")
-  expect_named(info, c("width", "height", "fps"))
+  expect_named(info, c("width", "height", "fps", "fps_num", "fps_den"))
   expect_gt(info$width,  0L)
   expect_gt(info$height, 0L)
   expect_gt(info$fps,    0L)
@@ -79,4 +79,23 @@ test_that(".ffmpeg_video_bitrate returns NA when ffprobe is missing", {
     result <- AV1R:::.ffmpeg_video_bitrate("/some/file.mp4")
     expect_true(is.na(result))
   })
+})
+
+test_that(".ffmpeg_video_info keeps a fractional frame rate exact", {
+  skip_if_not(nchar(Sys.which("ffmpeg")) > 0, "ffmpeg not installed")
+
+  tmp <- tempfile(fileext = ".mkv")
+  on.exit(unlink(tmp))
+  ret <- suppressWarnings(system2(
+    Sys.which("ffmpeg"),
+    c("-y", "-f", "lavfi", "-i", "color=black:size=16x16:rate=24000/1001",
+      "-t", "1", "-c:v", "ffv1", tmp),
+    stdout = FALSE, stderr = FALSE
+  ))
+  skip_if_not(ret == 0L && file.exists(tmp), "Could not create test video")
+
+  info <- AV1R:::.ffmpeg_video_info(tmp)
+  expect_equal(info$fps_num, 24000L)
+  expect_equal(info$fps_den, 1001L)
+  expect_equal(info$fps, 24L)
 })

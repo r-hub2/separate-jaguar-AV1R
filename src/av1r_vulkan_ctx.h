@@ -48,10 +48,9 @@ struct Av1rVulkanCtx {
 };
 
 // ============================================================================
-// av1r_init.cpp
+// av1r_init.cpp (shared with the FFV1 compute path)
 // ============================================================================
-VkInstance av1r_create_instance();
-void       av1r_destroy_instance(VkInstance instance);
+#include "av1r_vk_instance.h"
 
 // ============================================================================
 // av1r_device.cpp

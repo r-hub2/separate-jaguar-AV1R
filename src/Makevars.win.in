@@ -12,6 +12,12 @@ SOURCES = \
   av1r_device.cpp         \
   av1r_memory.cpp         \
   av1r_commands.cpp       \
-  av1r_encode_vulkan.cpp
+  av1r_encode_vulkan.cpp  \
+  av1r_ffv1_rangecoder.cpp \
+  av1r_ffv1_encoder.cpp   \
+  av1r_mkv_writer.cpp     \
+  av1r_ffv1_bindings.cpp  \
+  av1r_ffv1_gpu.cpp       \
+  av1r_ffv1_gpu_encoder.cpp
 
 OBJECTS = $(SOURCES:.cpp=.o)

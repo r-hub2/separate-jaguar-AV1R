@@ -58,6 +58,6 @@ test_that("convert_folder result has correct columns", {
   on.exit(unlink(tmp, recursive = TRUE))
 
   result <- suppressMessages(convert_folder(tmp))
-  expect_named(result, c("input", "output", "status", "message"),
+  expect_named(result, c("input", "output", "input_size", "status", "message"),
                ignore.order = TRUE)
 })

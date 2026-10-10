@@ -15,17 +15,21 @@ output_dir <- "/mnt/Data2/DS_projects/AV_test1/av1_output"
 crf        <- 28L
 preset     <- 8L     # CPU only: 0 (slow/best) - 13 (fast)
 backend    <- "auto" # "auto", "vaapi", "vulkan", "cpu"
+recursive  <- TRUE   # scan subfolders (TIFF folders -> single video each)
+max_depth  <- 5L     # max subfolder depth when recursive = TRUE
 
 # ── Run ──────────────────────────────────────────────────────────────────
 opts <- av1r_options(crf = crf, preset = preset, backend = backend)
-cat(sprintf("Input:   %s\n", input_dir))
-cat(sprintf("Output:  %s\n", output_dir))
-cat(sprintf("Backend: %s (detected: %s)\n", backend, detect_backend()))
+cat(sprintf("Input:     %s\n", input_dir))
+cat(sprintf("Output:    %s\n", output_dir))
+cat(sprintf("Backend:   %s (detected: %s)\n", backend, detect_backend()))
+cat(sprintf("Recursive: %s (max_depth=%d)\n", recursive, max_depth))
 print(opts)
 cat("\n")
 
 t0 <- proc.time()["elapsed"]
-results <- convert_folder(input_dir, output_dir, options = opts)
+results <- convert_folder(input_dir, output_dir, options = opts,
+                          recursive = recursive, max_depth = max_depth)
 elapsed <- proc.time()["elapsed"] - t0
 
 # ── Summary ──────────────────────────────────────────────────────────────
@@ -40,7 +44,7 @@ total_out <- 0
 for (i in seq_len(nrow(results))) {
   r <- results[i, ]
   if (r$status == "ok") {
-    in_mb  <- file.info(r$input)$size / 1024^2
+    in_mb  <- r$input_size / 1024^2
     out_mb <- file.info(r$output)$size / 1024^2
     total_in  <- total_in + in_mb
     total_out <- total_out + out_mb

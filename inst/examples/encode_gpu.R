@@ -1,6 +1,6 @@
 library(AV1R)
 
-input <- "/mnt/Data2/DS_projects/AV_test/DuckTales S01E01 Не сдавать корабль!.avi"
+input <- "/mnt/Data2/DS_projects/AV_test/test.avi"
 output     <- "/mnt/Data2/DS_projects/AV_test/test_av1_gpu.mp4"
 
 

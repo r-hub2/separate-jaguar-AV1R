@@ -1,3 +1,11 @@
+# AV1R 0.1.4
+
+* New `archive_tiff()`: lossless 16-bit TIFF stacks to FFV1 in MKV,
+  byte-identical to `ffmpeg -c:v ffv1 -coder 1`.
+* GPU encoding via Vulkan compute: `archive_tiff(backend = "auto")`.
+* `verify = TRUE`, OME-XML attachment, JSON sidecar.
+* New example `inst/examples/benchmark_ffv1.R`.
+
 # AV1R 0.1.3
 
 ## TIFF scaling

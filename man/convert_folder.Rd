@@ -9,7 +9,9 @@ convert_folder(
   output_dir = input_dir,
   options = av1r_options(),
   ext = c("mp4", "avi", "mkv", "mov", "flv", "mpg", "mpeg", "webm", "tif", "tiff"),
-  skip_existing = TRUE
+  skip_existing = TRUE,
+  recursive = FALSE,
+  max_depth = 5L
 )
 }
 \arguments{
@@ -26,11 +28,17 @@ Default: \code{c("mp4","avi","mkv","mov","flv","mpg","mpeg","webm","tif","tiff")
 
 \item{skip_existing}{If \code{TRUE} (default), skip files where the output
 already exists.}
+
+\item{recursive}{If \code{TRUE}, scan subfolders up to \code{max_depth}
+levels deep. Default: \code{FALSE}.}
+
+\item{max_depth}{Maximum subfolder depth when \code{recursive = TRUE}.
+Default: 5.}
 }
 \value{
 Invisibly returns a data.frame with columns \code{input},
-  \code{output}, \code{status} ("ok", "skipped", or "error"),
-  and \code{message}.
+  \code{output}, \code{input_size} (bytes), \code{status}
+  ("ok", "skipped", or "error"), and \code{message}.
 }
 \description{
 Finds all supported video files in \code{input_dir} and converts them to
@@ -41,10 +49,19 @@ and \code{.mp4} extension.
 When a folder contains only single-page TIFF images (e.g. a microscopy
 image sequence), they are automatically combined into a single video
 named after the input folder.
+
+When \code{recursive = TRUE}, subfolders (up to \code{max_depth} levels)
+are scanned. Each subfolder containing only TIFF images is combined into
+a single video named after the subfolder. Subfolders with video files are
+processed file-by-file. All output is written flat into \code{output_dir},
+with subfolder names used as prefixes to avoid collisions.
 }
 \examples{
 \dontrun{
 # Requires FFmpeg installed
 convert_folder("~/data/microscopy", file.path(tempdir(), "av1_output"))
+
+# Recursive: each subfolder with TIFFs becomes a separate video
+convert_folder("~/data/plates", "~/av1_output", recursive = TRUE)
 }
 }

@@ -1,5 +1,7 @@
 # AV1R
 
+[![R-hub check on the R Consortium cluster](https://github.com/r-hub2/separate-jaguar-AV1R/actions/workflows/rhub-rc.yaml/badge.svg)](https://github.com/r-hub2/separate-jaguar-AV1R/actions/workflows/rhub-rc.yaml)
+
 **AV1 video encoding for biological microscopy data.**
 
 AV1R is an R package for biologists that converts legacy microscopy video formats (H.264/H.265, AVI/MJPEG, TIFF stacks) to the modern AV1 codec with minimal quality loss.
@@ -54,6 +56,10 @@ convert_to_av1("stack.tif", "stack.mp4", av1r_options(crf = 20))
 
 # Batch convert entire experiment folder
 convert_folder("experiment/", "compressed/")
+
+# Lossless archive (FFV1 in MKV): 16-bit TIFF stack, or a video as gray16
+archive_tiff("stack.tif")
+archive_video("recording.avi", audio = TRUE)
 
 # Check what backend will be used
 detect_backend()
@@ -128,13 +134,23 @@ it.
 
 ## System Requirements
 
-- **FFmpeg >= 4.4** with `libsvtav1` (required for CPU encoding)
+- **FFmpeg >= 4.4** with `libsvtav1` (required for CPU encoding); `ffmpeg`
+  and `ffprobe` are also used by `archive_video()` and for `verify = TRUE`
 - **libvulkan-dev** (optional, for GPU encoding on Linux)
+- **R package `tiff`** (optional, for `archive_tiff()`)
+- **glslc** (optional, build time: GPU encoding for `archive_tiff()` and
+  `archive_video()`)
 
 ```bash
 # Ubuntu 22.04+
 sudo apt install ffmpeg libvulkan-dev
 ```
+
+`glslc` (shaderc) is needed only at install time, for the GPU path of the
+FFV1 archive. Install it from your distribution if packaged
+(`sudo apt install glslc` on recent Ubuntu/Debian) or from the
+[Vulkan SDK](https://vulkan.lunarg.com/sdk/home); `configure` also looks in
+`$GLSLC` and `$VULKAN_SDK/bin`. Without it the CPU encoder is used.
 
 ## TIFF stacks
 
@@ -145,7 +161,8 @@ TIFF stacks use near-lossless CRF 5 by default (`tiff_crf`). Output resolution c
 > quantification, ratiometric imaging, colocalization analysis), lossy
 > compression will alter the data. For such use cases, keep the original
 > TIFF/PNG files for analysis and use AV1R only for visualization, sharing,
-> and archival of preview copies. Lossless alternatives: TIFF, PNG, FFV1.
+> and archival of preview copies. For lossless archiving use
+> `archive_tiff()` (FFV1, see below).
 
 ```r
 # 2x magnification (proportional, no distortion)
@@ -156,6 +173,154 @@ convert_to_av1("stack.tif", "stack.mp4", av1r_options(tiff_scale = c(1920, 1080)
 ```
 
 See `inst/examples/tiff_scale.R` for more examples.
+
+## Lossless archive (FFV1)
+
+`archive_tiff()` stores 16-bit grayscale TIFF stacks losslessly as FFV1
+version 3 ([RFC 9043](https://www.rfc-editor.org/rfc/rfc9043)) in Matroska.
+Decoding gives back the original pixel values bit for bit, so the archive
+can replace the TIFF for quantitative analysis. `archive_video()` does the
+same for video files (see below).
+
+```r
+# stack.tif -> stack.mkv + stack.mkv.json
+archive_tiff("stack.tif")
+
+# Decode with FFmpeg and compare bit-exactly with the input
+archive_tiff("stack.tif", "archive/stack.mkv", verify = TRUE)
+
+# Force the encoder: "auto" (default, GPU if available), "vulkan" or "cpu"
+archive_tiff("stack.tif", backend = "cpu")
+
+# Slice raster and context model
+archive_tiff("stack.tif", slices = c(4L, 4L), context_model = 0L)
+```
+
+### Video input
+
+`archive_video()` decodes a video with FFmpeg and archives its luma (Y)
+channel as 16-bit grayscale FFV1. Frames are decoded and encoded on the
+fly in chunks, so long recordings need no more memory than one chunk.
+
+**When to use it.** FFV1 is lossless: it keeps every pixel of the decoded
+frames, including the noise and artefacts of a lossy codec. Use
+`archive_video()` for lossless or uncompressed sources (raw or
+uncompressed AVI, scientific camera recordings), where it saves space
+without loss. For lossy sources (MPEG-4, H.264, H.265, ...) the archive
+is much larger than the original — e.g. about 25x per frame for an MPEG-4
+AVI — so keep the original file as the master copy instead.
+
+```r
+# recording.avi -> recording.mkv + recording.mkv.json (video only)
+archive_video("recording.avi", verify = TRUE)
+
+# Keep the sound track: audio streams are copied unchanged
+archive_video("recording.avi", audio = TRUE)
+```
+
+- Lossless with respect to the frames FFmpeg decodes as `gray16le`:
+  colour (chroma) is not stored, and 8-bit luma is scaled to 16 bits by
+  FFmpeg. A colour source is reported in the messages.
+- Every decoded frame is stored exactly once (`-vsync passthrough`), at
+  the source's exact nominal frame rate (e.g. 24000/1001). Variable frame
+  rate timing is not preserved.
+- `audio = FALSE` (default) writes the video only. With `audio = TRUE` the
+  audio streams are added after encoding by an FFmpeg remux (stream copy,
+  one extra pass over the file); the FFV1 video stays byte-identical.
+- `verify = TRUE` decodes the archive and the source again and compares
+  the grayscale frames chunk by chunk.
+
+### Compatibility with FFmpeg
+
+AV1R has its own FFV1 encoder and Matroska writer: for `archive_tiff()`
+FFmpeg is needed only for `verify = TRUE` and to decode the archive later.
+The FFV1 bitstream is byte-identical to FFmpeg's encoder (checked packet by
+packet in the tests, FFmpeg 6.1) for
+
+```bash
+ffmpeg -f rawvideo -pix_fmt gray16le -s WxH -i stack.raw \
+       -c:v ffv1 -level 3 -coder 1 -context 0 -slices 4 -slicecrc 1 -g 1 stack.mkv
+```
+
+with `-slices` = `slices[1] * slices[2]` and `-context` = `context_model`.
+The track is stored as FFmpeg stores FFV1 in Matroska (CodecID
+`V_MS/VFW/FOURCC`), so archives play in FFmpeg-based tools, VLC,
+GStreamer and mpv / Celluloid.
+Every frame is a keyframe and every slice carries a CRC, so a damaged frame
+does not affect the others. To read the samples back:
+
+```bash
+ffmpeg -i stack.mkv -map 0:v:0 -vsync passthrough -f rawvideo -pix_fmt gray16le stack.raw
+```
+
+### GPU encoding
+
+With `backend = "vulkan"` (or `"auto"` when a GPU is found) slices are
+encoded by Vulkan compute shaders. GPU and CPU produce byte-identical
+archives. The GPU path is built when Vulkan headers and `glslc` are found
+at install time; the device used is recorded in the sidecar
+(`encoder_backend`).
+
+- One GPU thread codes one slice of one frame (the range coder is serial
+  within a slice); frames go to the GPU in batches of up to 256 (about
+  1 GiB of buffers), so a batch keeps thousands of slice coders busy.
+- A batch is coded as a series of short dispatches of about 8 ms each,
+  a few slice rows at a time, so the desktop stays responsive while the
+  GPU encodes.
+- All buffers the shader uses are in device-local memory; frames are
+  uploaded and results read back through staging buffers.
+
+Set `AV1R_FFV1_PROFILE=1` to print the memory types of the GPU buffers and
+the time per stage (conversion, upload, dispatch, gather, mux) to stderr
+when an archive is closed. `inst/examples/profile_ffv1_shader.R` times the
+shader alone for several slice rasters and batch sizes.
+
+### Choosing slices and context model
+
+Slices are coded independently: more slices give more parallelism but
+worse compression, especially on small frames, because every slice starts
+with untrained contexts. `context_model = 1` adapts slowly and pays off
+only on large frames. Compression ratio on a small-frame stack (510 frames
+171x196, `context_model = 0`):
+
+| slices | ratio |
+|--------|-------|
+| 2x2    | 1.35  |
+| 4x4    | 1.22  |
+| 8x8    | 1.08  |
+
+Compression is identical to FFmpeg's. Since the GPU gets its parallelism
+from batches of frames, the default `c(2L, 2L)` is fast on the GPU too.
+
+### Speed
+
+`inst/examples/benchmark_ffv1.R`, slices 2x2, `context_model = 0`, AMD
+RX 9070, FFmpeg 6.1.1, MB/s of 16-bit input, frames in memory.
+
+| input | AV1R vulkan | AV1R cpu | ffmpeg `-threads 1` | ffmpeg |
+|-------|-------------|----------|---------------------|--------|
+| mitosis.tif, 171x196, 510 frames  | 67.3 | 20.0 | 28.3 | 80.1  |
+
+FFmpeg encodes slices on all CPU cores; the AV1R CPU encoder uses one.
+
+### Output files
+
+- `<output>.mkv` — FFV1 video track (plus the copied audio streams with
+  `archive_video(audio = TRUE)`); OME-XML from the TIFF ImageDescription is
+  attached as `metadata.ome.xml`.
+- `<output>.mkv.json` (`sidecar = TRUE`) — codec parameters, frame size
+  and count, MD5 of the source and the archive, verification result and
+  FFmpeg version, encoder backend, AV1R and R versions, OME-XML; for video
+  also the source pixel format, the gray16 conversion and whether audio was
+  copied.
+
+### Limitations
+
+- 16-bit grayscale only (RGB48 and 8-bit are planned); video is archived
+  as luma only.
+- `archive_tiff()` requires the `tiff` package; `archive_video()` requires
+  `ffmpeg` and `ffprobe`. Both work in chunks, so inputs larger than RAM
+  work.
 
 ## Options
 

@@ -15,7 +15,7 @@ A list with elements: \code{path}, \code{n_frames},
   \code{width}, \code{height}, \code{size_mb}.
 }
 \description{
-Does not load pixel data into R — only inspects the file.
+Does not load pixel data into R -- only inspects the file.
 Useful for checking frame count and dimensions before encoding.
 }
 \examples{

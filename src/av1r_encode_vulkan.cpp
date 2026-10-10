@@ -128,7 +128,8 @@ struct Av1rEncoder {
     // Параметры
     uint32_t width  = 0;
     uint32_t height = 0;
-    uint32_t fps    = 0;
+    uint32_t fps    = 0;      // frame rate fps / fps_den
+    uint32_t fps_den = 1;
     uint32_t crf    = 28;
     uint32_t frameCount = 0;
 
@@ -594,7 +595,7 @@ static void initRateControl(Av1rEncoder& enc, VkCommandBuffer cmd)
     enc.rateControlLayer.pNext               = &enc.av1RateControlLayer;
     enc.rateControlLayer.sType               = VK_STRUCTURE_TYPE_VIDEO_ENCODE_RATE_CONTROL_LAYER_INFO_KHR;
     enc.rateControlLayer.frameRateNumerator  = enc.fps;
-    enc.rateControlLayer.frameRateDenominator = 1;
+    enc.rateControlLayer.frameRateDenominator = enc.fps_den;
     enc.rateControlLayer.averageBitrate      = 5000000;  // 5 Mbps
     enc.rateControlLayer.maxBitrate          = 20000000; // 20 Mbps
 
@@ -1058,7 +1059,7 @@ struct Av1rStreamEncoder {
 void av1r_vulkan_encode_init(
     Av1rVulkanCtx&       ctx,
     Av1rStreamEncoder&   se,
-    int width, int height, int fps, int crf)
+    int width, int height, int fps_num, int fps_den, int crf)
 {
     if (!ctx.initialized)
         throw std::runtime_error("Vulkan context not initialized");
@@ -1073,7 +1074,8 @@ void av1r_vulkan_encode_init(
     se.enc.transferQFam   = ctx.transferQueue.queue_family_index;
     se.enc.width          = static_cast<uint32_t>(width  & ~1);
     se.enc.height         = static_cast<uint32_t>(height & ~1);
-    se.enc.fps            = static_cast<uint32_t>(fps);
+    se.enc.fps            = static_cast<uint32_t>(fps_num);
+    se.enc.fps_den        = static_cast<uint32_t>(fps_den);
     se.enc.crf            = static_cast<uint32_t>(crf);
 
     createVideoSession(se.enc, crf);
@@ -1198,8 +1200,8 @@ void av1r_vulkan_encode_finish(Av1rStreamEncoder& se) {
 Av1rStreamEncoder* av1r_vulkan_stream_new() { return new Av1rStreamEncoder{}; }
 
 void av1r_vulkan_stream_init(Av1rVulkanCtx& ctx, Av1rStreamEncoder* se,
-                              int w, int h, int fps, int crf) {
-    av1r_vulkan_encode_init(ctx, *se, w, h, fps, crf);
+                              int w, int h, int fps_num, int fps_den, int crf) {
+    av1r_vulkan_encode_init(ctx, *se, w, h, fps_num, fps_den, crf);
 }
 void av1r_vulkan_stream_encode(Av1rStreamEncoder* se, const uint8_t* frame,
                                 int idx, std::vector<uint8_t>& pkt) {

@@ -1,5 +1,6 @@
 // Suppress noisy driver warnings (e.g. RADV "not a conformant Vulkan
-// implementation") by temporarily redirecting fd 2 to /dev/null.
+// implementation") by temporarily redirecting fd 2 to the null device
+// (/dev/null, or NUL on Windows).
 // RAII: create on stack, fd 2 restored when object goes out of scope.
 // Avoids direct use of 'stderr' symbol (CRAN portability NOTE).
 
@@ -15,7 +16,11 @@ struct StderrSuppressor {
     StderrSuppressor() {
         fflush(NULL);
         saved_fd = dup(STDERR_FILENO);
+#ifdef _WIN32
+        int devnull = open("NUL", O_WRONLY);
+#else
         int devnull = open("/dev/null", O_WRONLY);
+#endif
         if (devnull >= 0) { dup2(devnull, STDERR_FILENO); close(devnull); }
     }
     ~StderrSuppressor() {

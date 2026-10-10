@@ -186,7 +186,8 @@
   tryCatch({
     .Call("R_av1r_vulkan_encode",
           probe_input, tmp_out,
-          info$width, info$height, info$fps, as.integer(crf),
+          info$width, info$height, info$fps_num, info$fps_den,
+          as.integer(crf),
           PACKAGE = "AV1R")
     if (!file.exists(tmp_out)) return(NA_real_)
     measure_ssim(probe_input, tmp_out, duration = 1)

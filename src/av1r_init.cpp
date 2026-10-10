@@ -1,15 +1,16 @@
-// Vulkan instance and device initialisation for AV1R
-// Compiled only when AV1R_USE_VULKAN is defined (set by configure)
+// Vulkan instance initialisation for AV1R, shared by the AV1 video-encode
+// path (AV1R_USE_VULKAN) and the FFV1 compute path (AV1R_FFV1_GPU).
 
-#ifdef AV1R_USE_VULKAN
+#if defined(AV1R_USE_VULKAN) || defined(AV1R_FFV1_GPU)
 
 #include <vulkan/vulkan.h>
 #include <stdexcept>
+#include <string>
 #include <vector>
 #include <cstring>
 #include <cstdio>
 #include <unistd.h>
-#include "av1r_vulkan_ctx.h"
+#include "av1r_vk_instance.h"
 
 #include "av1r_stderr_suppress.h"
 
@@ -49,4 +50,4 @@ void av1r_destroy_instance(VkInstance instance)
     }
 }
 
-#endif // AV1R_USE_VULKAN
+#endif // AV1R_USE_VULKAN || AV1R_FFV1_GPU

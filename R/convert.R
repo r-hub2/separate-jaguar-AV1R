@@ -88,7 +88,8 @@ convert_to_av1 <- function(input, output, options = av1r_options()) {
     }
     .Call("R_av1r_vulkan_encode",
           input, output,
-          sz$width, sz$height, info$fps, as.integer(vulkan_crf),
+          sz$width, sz$height, info$fps_num, info$fps_den,
+          as.integer(vulkan_crf),
           PACKAGE = "AV1R")
   } else if (bk == "vaapi") {
     message(sprintf("AV1R [gpu/vaapi]: VAAPI AV1 encode  [crf=%d]", options$crf))
@@ -362,17 +363,24 @@ convert_to_av1 <- function(input, output, options = av1r_options()) {
   height <- as.integer(sub("height=", "", grep("^height=", lines, value = TRUE)))
   fps_str <- sub("r_frame_rate=", "", grep("^r_frame_rate=", lines, value = TRUE))
 
-  fps <- if (length(fps_str) > 0 && grepl("/", fps_str)) {
-    parts <- strsplit(fps_str, "/")[[1]]
-    as.integer(round(as.numeric(parts[1]) / as.numeric(parts[2])))
+  # Exact rate as a fraction (e.g. 24000/1001); fps is the rounded value.
+  parts <- if (length(fps_str) > 0 && grepl("/", fps_str))
+    suppressWarnings(as.numeric(strsplit(fps_str[1], "/")[[1]])) else NA_real_
+  if (length(parts) == 2L && all(is.finite(parts)) && all(parts > 0) &&
+      all(parts == round(parts)) && all(parts < .Machine$integer.max)) {
+    fps_num <- as.integer(parts[1])
+    fps_den <- as.integer(parts[2])
   } else {
-    25L
+    fps_num <- 25L
+    fps_den <- 1L
   }
+  fps <- as.integer(round(fps_num / fps_den))
 
   if (length(width) == 0 || length(height) == 0)
     stop("Could not read video dimensions from: ", input)
 
-  list(width = width, height = height, fps = fps)
+  list(width = width, height = height, fps = fps,
+       fps_num = fps_num, fps_den = fps_den)
 }
 
 # Internal: get video codec name via ffprobe (e.g. "h264", "vp9", "av1")

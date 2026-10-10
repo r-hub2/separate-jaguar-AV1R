@@ -14,7 +14,8 @@ struct Av1rStreamEncoder;
 
 Av1rStreamEncoder* av1r_vulkan_stream_new();
 void av1r_vulkan_stream_init(Av1rVulkanCtx& ctx, Av1rStreamEncoder* se,
-                              int width, int height, int fps, int crf);
+                              int width, int height, int fps_num, int fps_den,
+                              int crf);
 void av1r_vulkan_stream_encode(Av1rStreamEncoder* se, const uint8_t* frame_nv12,
                                 int frame_index, std::vector<uint8_t>& out_packet);
 void av1r_vulkan_stream_finish(Av1rStreamEncoder* se);

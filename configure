@@ -81,6 +81,34 @@ if [ "$USE_VULKAN" = "auto" ] || [ "$USE_VULKAN" = "yes" ]; then
   fi
 fi
 
+# --- FFV1 GPU path (Vulkan compute, shaders compiled with glslc) ---
+# Independent of VK_KHR_VIDEO_ENCODE_AV1: needs only vulkan.h and glslc.
+# Priority for glslc: $GLSLC env var > Vulkan SDK > PATH.
+FFV1_GPU="no"
+if [ "$HAVE_VULKAN_H" = "yes" ]; then
+  echo "Checking for glslc (FFV1 GPU shaders)..."
+  if [ -n "$GLSLC" ] && [ -x "$GLSLC" ]; then
+    :
+  elif [ -n "$VULKAN_SDK" ] && [ -x "$VULKAN_SDK/bin/glslc" ]; then
+    GLSLC="$VULKAN_SDK/bin/glslc"
+  else
+    GLSLC=$(command -v glslc 2>/dev/null)
+  fi
+
+  if [ -z "$GLSLC" ]; then
+    echo "  glslc not found, FFV1 GPU path disabled."
+    echo "  Ubuntu/Debian: sudo apt install glslc"
+  elif sh tools/ffv1_spv.sh "$GLSLC"; then
+    echo "  glslc: $GLSLC"
+    FFV1_GPU="yes"
+    VULKAN_CPPFLAGS="$VULKAN_CPPFLAGS -DAV1R_FFV1_GPU"
+    [ -z "$VULKAN_LIBS" ] && VULKAN_LIBS="-lvulkan"
+  else
+    echo "  Shader compilation failed, FFV1 GPU path disabled."
+  fi
+fi
+[ "$FFV1_GPU" = "no" ] && rm -f src/av1r_ffv1_spv.h
+
 # --- Write Makevars ---
 sed \
   -e "s|@VULKAN_CPPFLAGS@|$VULKAN_CPPFLAGS|g" \
@@ -95,4 +123,5 @@ if [ "$USE_VULKAN" = "yes" ]; then
 else
   echo "  GPU encoding (Vulkan AV1):    no"
 fi
+echo "  FFV1 archive on GPU:          $FFV1_GPU"
 echo ""

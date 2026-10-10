@@ -1,0 +1,243 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+// FFV1 v3 Slice encoder, gray16 (RFC 9043). Port of Encoder::encode_slice
+// (av1r_ffv1_encoder.cpp); output must be byte-identical.
+//
+// One invocation codes one Slice of one frame of the batch: optional
+// keyframe bit, Slice Header, Slice Content, Sentinel termination. The
+// Slice Footer (slice_size, error_status, CRC) is appended on the CPU.
+// Coder index c = frame * n_slices + slice; a workgroup holds 32 coders,
+// so the range coders of neighbouring Slices run side by side in one wave.
+
+layout(local_size_x = 32) in;
+
+struct Slice { uint sx, sy, x0, y0, w, h, pad0, pad1; };
+
+layout(std430, binding = 0) readonly  buffer Pixels { uint pixels[]; };  // u16 pairs, LE
+layout(std430, binding = 1) readonly  buffer Slices { Slice slices[]; };
+layout(std430, binding = 2) readonly  buffer Trans  { uint trans[]; };   // one[256], zero[256]
+layout(std430, binding = 3) readonly  buffer Quant  { int quant[]; };    // [5][256]
+layout(std430, binding = 4)           buffer States { uint states[]; };  // bytes, per coder
+layout(std430, binding = 5) writeonly buffer Out    { uint rc_out[]; };
+layout(std430, binding = 6) writeonly buffer Len    { uint out_len[]; };
+layout(std430, binding = 7)           buffer Coder  { uint coder[]; };   // CODER_WORDS per coder
+
+const uint CODER_WORDS = 8u;
+
+layout(push_constant) uniform PC {
+    uint width;         // frame size
+    uint height;
+    uint n_slices;
+    uint cap_words;     // output capacity per Slice
+    uint state_words;   // state bytes / 4 per coder
+    uint qset;          // quant_table_set_index
+    uint n_coders;      // frames in the batch * n_slices
+    uint row_begin;     // Slice rows coded by this dispatch
+    uint row_end;
+} pc;
+
+// State byte layout per coder: [0, 32) Slice Header, 32 keyframe bit,
+// 33 sentinel, [64, 64 + 32 * context_count) contexts.
+const uint ST_HEADER   = 0u;
+const uint ST_KEYFRAME = 32u;
+const uint ST_SENTINEL = 33u;
+const uint ST_CONTEXTS = 64u;
+
+// Shared memory kept small (3.5 KB) so that many workgroups fit per compute
+// unit: transition tables packed as one | zero << 8, quantization tables as
+// int16 pairs.
+shared uint rc_tab[256];
+shared uint q16[5 * 256 / 2];
+
+#define RC_ONE(s)  (rc_tab[s] & 0xFFu)
+#define RC_ZERO(s) ((rc_tab[s] >> 8) & 0xFFu)
+
+// Entry i of the quantization tables [5][256].
+int q(uint i) {
+    uint w = q16[i >> 1];
+    return (i & 1u) != 0u ? int(w) >> 16 : int(w << 16) >> 16;
+}
+
+uint st_base;   // byte offset of this coder's states
+
+// Write-back cache of one state word: consecutive bits of a symbol mostly
+// use neighbouring states (same word), which then stay in a register instead
+// of a read-modify-write of global memory per bit. The states of a coder are
+// accessed by this invocation only, so the cache needs no coherence; it is
+// written back by st_flush() before the part ends.
+uint st_cw_index = 0xFFFFFFFFu;   // word index in states[], none yet
+uint st_cw       = 0u;
+bool st_cw_dirty = false;
+
+void st_flush() {
+    if (st_cw_dirty) states[st_cw_index] = st_cw;
+    st_cw_dirty = false;
+}
+
+void st_select(uint w) {
+    if (w != st_cw_index) {
+        st_flush();
+        st_cw = states[w];
+        st_cw_index = w;
+    }
+}
+
+uint st_get(uint i) {
+    uint a = st_base + i;
+    st_select(a >> 2);
+    return (st_cw >> ((a & 3u) * 8u)) & 0xFFu;
+}
+
+void st_set(uint i, uint v) {
+    uint a = st_base + i;
+    uint sh = (a & 3u) * 8u;
+    st_select(a >> 2);
+    st_cw = (st_cw & ~(0xFFu << sh)) | (v << sh);
+    st_cw_dirty = true;
+}
+
+#define RC_STATE_GET(i)    st_get(i)
+#define RC_STATE_SET(i, v) st_set(i, v)
+#include "rangecoder.glsl"
+
+// Current Slice and frame
+uint frame_px;   // index of the frame's first sample
+int  sx0, sy0, sw, sh;
+
+// Sample inside the Slice, interpreted as signed 16-bit (RFC 3.3.1).
+int px(int x, int y) {
+    uint i = frame_px + uint(sy0 + y) * pc.width + uint(sx0 + x);
+    uint v = (pixels[i >> 1] >> ((i & 1u) * 16u)) & 0xFFFFu;
+    return v >= 32768u ? int(v) - 65536 : int(v);
+}
+
+// Sample with the border rules of RFC 3.1, as in the CPU ring buffer:
+// rows above the Slice and the outer left column are 0, the left border
+// is the leftmost sample one row up, the right border repeats the
+// rightmost sample.
+int S(int x, int y) {
+    if (y < 0 || x < -1) return 0;
+    if (x == -1) return y >= 1 ? px(0, y - 1) : 0;
+    return px(min(x, sw - 1), y);
+}
+
+int median3(int a, int b, int c) {
+    return max(min(a, b), min(max(a, b), c));
+}
+
+// RFC 3.8, Figure 10, bits = 16.
+int fold16(int d) {
+    return ((d + 32768) & 0xFFFF) - 32768;
+}
+
+// Context (RFC 3.5) and difference (RFC 3.3.1, 3.8) of sample (x, y),
+// coded right away.
+void encode_sample(int x, int y) {
+    int l  = S(x - 1, y);
+    int L  = S(x - 2, y);
+    int t  = S(x, y - 1);
+    int tl = S(x - 1, y - 1);
+    int tr = S(x + 1, y - 1);
+    int T  = S(x, y - 2);
+
+    int ctx = q(uint((l - tl) & 255)) + q(256u + uint((tl - t) & 255)) +
+              q(512u + uint((t - tr) & 255)) + q(768u + uint((L - l) & 255)) +
+              q(1024u + uint((T - t) & 255));
+
+    int diff = S(x, y) - median3(l, t, l + t - tl);
+    if (ctx < 0) {
+        ctx  = -ctx;
+        diff = -diff;
+    }
+    rc_put_symbol(ST_CONTEXTS + uint(ctx) * 32u, fold16(diff), true);
+}
+
+// Range coder registers of a coder between dispatches (Slice rows coded in
+// parts, see main()).
+void save_coder(uint c) {
+    uint b = c * CODER_WORDS;
+    coder[b + 0u] = rc_low;
+    coder[b + 1u] = rc_range;
+    coder[b + 2u] = uint(rc_outstanding_byte);
+    coder[b + 3u] = uint(rc_outstanding_cnt);
+    coder[b + 4u] = rc_pos;
+    coder[b + 5u] = rc_word;
+}
+
+void load_coder(uint c) {
+    uint b = c * CODER_WORDS;
+    rc_low              = coder[b + 0u];
+    rc_range            = coder[b + 1u];
+    rc_outstanding_byte = int(coder[b + 2u]);
+    rc_outstanding_cnt  = int(coder[b + 3u]);
+    rc_pos              = coder[b + 4u];
+    rc_word             = coder[b + 5u];
+    rc_base             = c * pc.cap_words;
+    rc_cap              = pc.cap_words;
+}
+
+// One dispatch codes rows [row_begin, row_end) of every Slice, so that a
+// dispatch stays short (the GPU is not blocked for the display). The part
+// with row_begin = 0 writes the keyframe bit and the Slice Header, the part
+// that reaches the last row of the Slice terminates it; in between the
+// range coder registers are kept in `coder`, the context states in `states`
+// (set to 128 by the host before the first part, RFC 3.8.1.3).
+void main() {
+    uint tid = gl_LocalInvocationID.x;
+
+    for (uint i = tid; i < 256u; i += 32u)
+        rc_tab[i] = (trans[i] & 0xFFu) | ((trans[256u + i] & 0xFFu) << 8);
+    // Quantization entries are int16 (Encoder::build_table).
+    for (uint i = tid; i < 5u * 256u / 2u; i += 32u)
+        q16[i] = (uint(quant[2u * i]) & 0xFFFFu) | (uint(quant[2u * i + 1u]) << 16);
+    barrier();
+
+    uint c = gl_GlobalInvocationID.x;
+    if (c >= pc.n_coders) return;
+    uint slice = c % pc.n_slices;
+    uint frame = c / pc.n_slices;
+
+    Slice s  = slices[slice];
+    sx0 = int(s.x0);
+    sy0 = int(s.y0);
+    sw  = int(s.w);
+    sh  = int(s.h);
+    if (pc.row_begin >= uint(sh)) return;   // Slice already terminated
+    frame_px = frame * pc.width * pc.height;
+    st_base  = c * pc.state_words * 4u;
+
+    if (pc.row_begin == 0u) {
+        st_set(ST_SENTINEL, 129u);
+        rc_init(c * pc.cap_words, pc.cap_words);
+        if (slice == 0u)
+            rc_put_bit(ST_KEYFRAME, true);   // Frame: keyframe (first Slice)
+
+        // Slice Header (RFC 4.6)
+        rc_put_symbol(ST_HEADER, int(s.sx), false);
+        rc_put_symbol(ST_HEADER, int(s.sy), false);
+        rc_put_symbol(ST_HEADER, 0, false);            // slice_width - 1
+        rc_put_symbol(ST_HEADER, 0, false);            // slice_height - 1
+        rc_put_symbol(ST_HEADER, int(pc.qset), false); // quant_table_set_index x2
+        rc_put_symbol(ST_HEADER, int(pc.qset), false);
+        rc_put_symbol(ST_HEADER, 3, false);            // picture_structure
+        rc_put_symbol(ST_HEADER, 0, false);            // sar_num: unknown,
+        rc_put_symbol(ST_HEADER, 1, false);            // sar_den  0/1 as FFmpeg
+    } else {
+        load_coder(c);
+    }
+
+    // Slice Content (RFC 4.7), this part's rows
+    int y_end = min(int(pc.row_end), sh);
+    for (int y = int(pc.row_begin); y < y_end; ++y)
+        for (int x = 0; x < sw; ++x)
+            encode_sample(x, y);
+
+    if (y_end == sh) {
+        rc_put_bit(ST_SENTINEL, false);   // Sentinel mode (RFC 3.8.1.1.1)
+        out_len[c] = rc_finish();
+        st_flush();
+    } else {
+        save_coder(c);
+        st_flush();
+    }
+}

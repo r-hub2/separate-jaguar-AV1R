@@ -101,7 +101,7 @@ extern "C" SEXP R_av1r_detect_backend(SEXP prefer) {
 }
 
 // ============================================================================
-// R_av1r_vulkan_encode(input, output, width, height, fps, crf)
+// R_av1r_vulkan_encode(input, output, width, height, fps_num, fps_den, crf)
 // ffmpeg декодирует input в NV12 через pipe → C++ encode → IVF файл
 // ============================================================================
 #ifdef AV1R_VULKAN_VIDEO_AV1
@@ -112,7 +112,9 @@ extern "C" SEXP R_av1r_detect_backend(SEXP prefer) {
 void av1r_vulkan_query_min_extent(VkInstance, VkPhysicalDevice, uint32_t*, uint32_t*);
 
 // Minimal IVF muxer (AV1 raw bitstream → IVF container readable by ffmpeg)
-static void write_ivf_header(FILE* f, int width, int height, int fps, int n_frames) {
+// Time base fps_den / fps_num: frame n has pts n.
+static void write_ivf_header(FILE* f, int width, int height, int fps_num,
+                             int fps_den, int n_frames) {
     uint8_t hdr[32] = {};
     hdr[0]='D'; hdr[1]='K'; hdr[2]='I'; hdr[3]='F';
     // version=0, header_size=32
@@ -121,8 +123,11 @@ static void write_ivf_header(FILE* f, int width, int height, int fps, int n_fram
     hdr[8]='A'; hdr[9]='V'; hdr[10]='0'; hdr[11]='1';
     hdr[12]= width       & 0xFF; hdr[13]= (width  >>8)& 0xFF;
     hdr[14]= height      & 0xFF; hdr[15]= (height >>8)& 0xFF;
-    hdr[16]= fps         & 0xFF; hdr[17]= (fps    >>8)& 0xFF; hdr[18]=0; hdr[19]=0;
-    hdr[20]=1; hdr[21]=0; hdr[22]=0; hdr[23]=0; // timescale denominator
+    // rate (time base denominator) and scale (numerator), 32-bit LE
+    for (int i = 0; i < 4; i++) {
+        hdr[16 + i] = (fps_num >> (8 * i)) & 0xFF;
+        hdr[20 + i] = (fps_den >> (8 * i)) & 0xFF;
+    }
     hdr[24]= n_frames    & 0xFF; hdr[25]=(n_frames>>8)&0xFF;
     hdr[26]=(n_frames>>16)&0xFF; hdr[27]=(n_frames>>24)&0xFF;
     fwrite(hdr, 1, 32, f);
@@ -139,12 +144,16 @@ static void write_ivf_frame(FILE* f, const uint8_t* data, size_t size, uint64_t 
 
 extern "C" SEXP R_av1r_vulkan_encode(SEXP r_input, SEXP r_output,
                                       SEXP r_width, SEXP r_height,
-                                      SEXP r_fps,   SEXP r_crf) {
+                                      SEXP r_fps_num, SEXP r_fps_den,
+                                      SEXP r_crf) {
     const char* input  = CHAR(STRING_ELT(r_input,  0));
     const char* output = CHAR(STRING_ELT(r_output, 0));
     int width  = INTEGER(r_width)[0];
     int height = INTEGER(r_height)[0];
-    int fps    = INTEGER(r_fps)[0];
+    int fps_num = Rf_asInteger(r_fps_num);
+    int fps_den = Rf_asInteger(r_fps_den);
+    if (fps_num == NA_INTEGER || fps_den == NA_INTEGER || fps_num <= 0 || fps_den <= 0)
+        Rf_error("frame rate must be a positive fraction fps_num / fps_den");
     int crf    = INTEGER(r_crf)[0];
 
     // Align to even (NV12 requirement)
@@ -187,11 +196,17 @@ extern "C" SEXP R_av1r_vulkan_encode(SEXP r_input, SEXP r_output,
                               inp.compare(inp.size()-5, 5, ".tiff") == 0));
 
     std::string cmd = "ffmpeg";
-    if (is_image_seq) cmd += " -framerate " + std::to_string(fps);
+    if (is_image_seq)
+        cmd += " -framerate " + std::to_string(fps_num) + "/" + std::to_string(fps_den);
+    // -map 0:v:0 -an: first video stream only. -vsync passthrough: every
+    // decoded frame exactly once (rawvideo has no timestamps; otherwise ffmpeg
+    // duplicates or drops frames for a constant rate, e.g. a duplicated first
+    // frame when the stream starts at pts 1).
     cmd += " -i \"" + inp + "\""
+           " -map 0:v:0 -an -vsync passthrough"
            " -f rawvideo -pix_fmt nv12"
            " -vf scale=" + std::to_string(width) + ":" + std::to_string(height) +
-           " -an - 2>/dev/null";
+           " - 2>/dev/null";
 
     FILE* pipe = popen(cmd.c_str(), "r");
     if (!pipe) {
@@ -203,7 +218,7 @@ extern "C" SEXP R_av1r_vulkan_encode(SEXP r_input, SEXP r_output,
     // Init streaming encoder
     Av1rStreamEncoder* se = av1r_vulkan_stream_new();
     try {
-        av1r_vulkan_stream_init(ctx, se, width, height, fps, crf);
+        av1r_vulkan_stream_init(ctx, se, width, height, fps_num, fps_den, crf);
     } catch (const std::exception& e) {
         av1r_vulkan_stream_delete(se);
         pclose(pipe);
@@ -223,7 +238,7 @@ extern "C" SEXP R_av1r_vulkan_encode(SEXP r_input, SEXP r_output,
         av1r_destroy_instance(ctx.instance);
         Rf_error("Cannot write output IVF: %s", ivf_tmp.c_str());
     }
-    write_ivf_header(fout, width, height, fps, 0);
+    write_ivf_header(fout, width, height, fps_num, fps_den, 0);
 
     // Stream: read one frame → encode → write IVF packet → repeat
     std::vector<uint8_t> frame_buf(frame_bytes);
@@ -300,12 +315,37 @@ extern "C" SEXP R_av1r_vulkan_encode(SEXP r_input, SEXP r_output,
 // ============================================================================
 // Registration table
 // ============================================================================
+extern "C" SEXP R_av1r_ffv1_open(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP,
+                                 SEXP, SEXP, SEXP);
+extern "C" SEXP R_av1r_ffv1_write(SEXP, SEXP);
+extern "C" SEXP R_av1r_ffv1_close(SEXP);
+extern "C" SEXP R_av1r_ffv1_abort(SEXP);
+extern "C" SEXP R_av1r_ffv1_rac_selftest(SEXP);
+extern "C" SEXP R_av1r_ffv1_gpu_selftest(SEXP);
+extern "C" SEXP R_av1r_ffv1_gpu_device();
+extern "C" SEXP R_av1r_ffv1_gpu_rac_selftest(SEXP, SEXP, SEXP);
+extern "C" SEXP R_av1r_ffv1_gpu_slice_selftest(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern "C" SEXP R_av1r_ffv1_gpu_bench(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern "C" SEXP R_av1r_mkv_selftest(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP,
+                                    SEXP, SEXP);
+
 static const R_CallMethodDef CallEntries[] = {
     { "R_av1r_vulkan_available", (DL_FUNC) &R_av1r_vulkan_available, 0 },
     { "R_av1r_vulkan_devices",   (DL_FUNC) &R_av1r_vulkan_devices,   0 },
     { "R_av1r_detect_backend",   (DL_FUNC) &R_av1r_detect_backend,   1 },
+    { "R_av1r_ffv1_open",        (DL_FUNC) &R_av1r_ffv1_open,        10 },
+    { "R_av1r_ffv1_write",       (DL_FUNC) &R_av1r_ffv1_write,       2 },
+    { "R_av1r_ffv1_close",       (DL_FUNC) &R_av1r_ffv1_close,       1 },
+    { "R_av1r_ffv1_abort",       (DL_FUNC) &R_av1r_ffv1_abort,       1 },
+    { "R_av1r_ffv1_rac_selftest", (DL_FUNC) &R_av1r_ffv1_rac_selftest, 1 },
+    { "R_av1r_ffv1_gpu_selftest", (DL_FUNC) &R_av1r_ffv1_gpu_selftest, 1 },
+    { "R_av1r_ffv1_gpu_device",   (DL_FUNC) &R_av1r_ffv1_gpu_device,   0 },
+    { "R_av1r_ffv1_gpu_rac_selftest", (DL_FUNC) &R_av1r_ffv1_gpu_rac_selftest, 3 },
+    { "R_av1r_ffv1_gpu_slice_selftest", (DL_FUNC) &R_av1r_ffv1_gpu_slice_selftest, 6 },
+    { "R_av1r_ffv1_gpu_bench",    (DL_FUNC) &R_av1r_ffv1_gpu_bench,    6 },
+    { "R_av1r_mkv_selftest",     (DL_FUNC) &R_av1r_mkv_selftest,     8 },
 #ifdef AV1R_VULKAN_VIDEO_AV1
-    { "R_av1r_vulkan_encode",    (DL_FUNC) &R_av1r_vulkan_encode,    6 },
+    { "R_av1r_vulkan_encode",    (DL_FUNC) &R_av1r_vulkan_encode,    7 },
 #endif
     { nullptr, nullptr, 0 }
 };

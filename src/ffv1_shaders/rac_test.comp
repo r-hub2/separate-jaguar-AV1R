@@ -1,0 +1,52 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+// Range coder test: workgroup k codes stream k (ops[first .. first + n - 1])
+// with 8 bit contexts and 4 symbol contexts. Compared byte-for-byte with
+// RangeEncoder on the CPU (R_av1r_ffv1_gpu_rac_selftest).
+
+layout(local_size_x = 32) in;
+
+struct Op { uint kind; uint ctx; uint is_signed; int value; };
+
+layout(std430, binding = 0) readonly  buffer Ops     { Op ops[]; };
+layout(std430, binding = 1) readonly  buffer Streams { uvec2 streams[]; };  // first, count
+layout(std430, binding = 2) readonly  buffer Trans   { uint trans[]; };     // one[256], zero[256]
+layout(std430, binding = 3) writeonly buffer Out     { uint rc_out[]; };
+layout(std430, binding = 4) writeonly buffer Len     { uint out_len[]; };
+
+layout(push_constant) uniform PC { uint cap_words; } pc;
+
+const uint N_BIT_CTX = 8u;
+const uint N_SYM_CTX = 4u;
+const uint N_STATES  = N_BIT_CTX + N_SYM_CTX * 32u;
+
+shared uint rc_one[256];
+shared uint rc_zero[256];
+shared uint rc_states[N_STATES];
+
+#include "rangecoder.glsl"
+
+void main() {
+    uint tid = gl_LocalInvocationID.x;
+    uint s   = gl_WorkGroupID.x;
+
+    for (uint i = tid; i < 256u; i += 32u) {
+        rc_one[i]  = trans[i];
+        rc_zero[i] = trans[256u + i];
+    }
+    for (uint i = tid; i < N_STATES; i += 32u) rc_states[i] = 128u;
+    barrier();
+
+    if (tid != 0u) return;
+
+    rc_init(s * pc.cap_words, pc.cap_words);
+    uvec2 st = streams[s];
+    for (uint k = 0u; k < st.y; ++k) {
+        Op op = ops[st.x + k];
+        if (op.kind == 0u)
+            rc_put_bit(op.ctx, op.value != 0);
+        else
+            rc_put_symbol(N_BIT_CTX + op.ctx * 32u, op.value, op.is_signed != 0u);
+    }
+    out_len[s] = rc_finish();
+}
