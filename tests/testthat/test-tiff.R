@@ -1,21 +1,20 @@
-## Tests for .tiff_to_png_sequence
+## Tests for .tiff_to_frame_sequence
 
-test_that(".tiff_to_png_sequence errors without magick", {
-  skip_if(requireNamespace("magick", quietly = TRUE),
-          "magick is installed, cannot test missing-package path")
+test_that(".tiff_to_frame_sequence errors without tiff", {
+  skip_if(requireNamespace("tiff", quietly = TRUE),
+          "tiff is installed, cannot test missing-package path")
   tmp <- tempfile(fileext = ".tif")
   file.create(tmp)
   on.exit(unlink(tmp))
   expect_error(
-    AV1R:::.tiff_to_png_sequence(tmp, tempfile()),
-    "magick"
+    AV1R:::.tiff_to_frame_sequence(tmp, tempfile()),
+    "tiff"
   )
 })
 
-test_that(".tiff_to_png_sequence extracts frames from TIFF", {
-  skip_if_not(requireNamespace("magick", quietly = TRUE), "magick not installed")
+test_that(".tiff_to_frame_sequence extracts 16-bit frames from TIFF", {
+  skip_if_not_installed("tiff")
 
-  # Create a minimal 3-frame TIFF via magick
   tmpdir <- tempfile("tiff_test_")
   tiff_path <- tempfile(fileext = ".tif")
   on.exit({
@@ -23,20 +22,25 @@ test_that(".tiff_to_png_sequence extracts frames from TIFF", {
     unlink(tiff_path)
   })
 
-  frames <- c(
-    magick::image_blank(8, 8, "red"),
-    magick::image_blank(8, 8, "green"),
-    magick::image_blank(8, 8, "blue")
-  )
-  magick::image_write(frames, tiff_path, format = "tiff")
+  # 3-frame 16-bit grayscale stack with distinct values per frame
+  set.seed(1)
+  pages <- lapply(1:3, function(k)
+    matrix(sample.int(65536L, 8L * 6L, replace = TRUE) - 1L, 8L, 6L) / 65535)
+  tiff::writeTIFF(pages, tiff_path, bits.per.sample = 16L)
 
   result <- suppressMessages(
-    AV1R:::.tiff_to_png_sequence(tiff_path, tmpdir)
+    AV1R:::.tiff_to_frame_sequence(tiff_path, tmpdir)
   )
 
-  expect_true(grepl("%06d\\.png$", result))
-  pngs <- list.files(tmpdir, pattern = "\\.png$")
-  expect_equal(length(pngs), 3L)
+  expect_true(grepl("%06d\\.tif$", result))
+  frames <- sort(list.files(tmpdir, pattern = "\\.tif$", full.names = TRUE))
+  expect_equal(length(frames), 3L)
+  for (k in 1:3) {
+    meta <- tiff::readTIFF(frames[k], all = TRUE, payload = FALSE)
+    expect_equal(meta$bits.per.sample, 16L)
+    expect_equal(tiff::readTIFF(frames[k], as.is = TRUE),
+                 round(pages[[k]] * 65535), ignore_attr = TRUE)
+  }
 })
 
 test_that(".convert_tiff_sequence handles skip_existing", {

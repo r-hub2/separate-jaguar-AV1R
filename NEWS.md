@@ -5,6 +5,9 @@
 * GPU encoding via Vulkan compute: `archive_tiff(backend = "auto")`.
 * `verify = TRUE`, OME-XML attachment, JSON sidecar.
 * New example `inst/examples/benchmark_ffv1.R`.
+* Multi-page TIFF input to `convert_to_av1()` no longer needs `magick`: pages
+  are extracted with `tiff` as 16-bit frames (previously reduced to 8-bit).
+  `magick` removed from `Suggests`.
 
 # AV1R 0.1.3
 

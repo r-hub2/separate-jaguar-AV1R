@@ -223,7 +223,8 @@ archive_tiff <- function(input, output = NULL, fps = 25, slices = c(2L, 2L),
 
 .ffv1_gpu_device <- function() {
   if (!exists("device", envir = .ffv1_gpu_cache, inherits = FALSE)) {
-    dev <- .Call("R_av1r_ffv1_gpu_device", PACKAGE = "AV1R")
+    dev <- tryCatch(.Call("R_av1r_ffv1_gpu_device", PACKAGE = "AV1R"),
+                    error = function(e) NULL)
     assign("device", if (is.null(dev) || is.na(dev)) NULL else dev,
            envir = .ffv1_gpu_cache)
   }

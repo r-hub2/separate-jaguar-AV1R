@@ -156,7 +156,7 @@ test_that(".probe_ssim returns NA for nonexistent file", {
 })
 
 test_that(".vulkan_probe_ssim returns NA for nonexistent file", {
-  skip_if_not(vulkan_available(), "Vulkan not available")
+  skip_if_no_vulkan_av1()
   # .vulkan_probe_ssim calls .ffmpeg_video_info which throws on bad input,
   # but the tryCatch in .vulkan_probe_ssim should catch it and return NA
   # However, .ffmpeg_video_info is called BEFORE the tryCatch block,

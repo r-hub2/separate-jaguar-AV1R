@@ -15,7 +15,7 @@ test_that("convert_to_av1 uses cpu backend when forced", {
 })
 
 test_that("convert_to_av1 uses vulkan backend when forced and available", {
-  skip_if_not(vulkan_available(), "Vulkan AV1 not available")
+  skip_if_no_vulkan_av1()
   skip_if_not(nchar(Sys.which("ffmpeg")) > 0, "ffmpeg not installed")
   expect_error(
     convert_to_av1("/nonexistent.mp4", tempfile(), av1r_options(backend = "vulkan")),

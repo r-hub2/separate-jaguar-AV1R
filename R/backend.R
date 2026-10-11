@@ -72,12 +72,15 @@ av1r_status <- function() {
 
 #' Check Vulkan AV1 availability
 #'
-#' @return \code{TRUE} if the package was compiled with Vulkan AV1 encode support.
+#' @return \code{TRUE} if the package was compiled with Vulkan AV1 encode support
+#'   and at least one device supports \code{VK_KHR_VIDEO_ENCODE_AV1}.
 #' @export
 #' @examples
 #' vulkan_available()
 vulkan_available <- function() {
-  tryCatch(.Call("R_av1r_vulkan_available", PACKAGE = "AV1R"), error = function(e) FALSE)
+  compiled <- tryCatch(isTRUE(.Call("R_av1r_vulkan_available", PACKAGE = "AV1R")),
+                       error = function(e) FALSE)
+  compiled && identical(detect_backend("vulkan"), "vulkan")
 }
 
 #' List Vulkan-capable GPU devices

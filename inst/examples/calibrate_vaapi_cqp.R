@@ -11,25 +11,16 @@ library(AV1R)
 input <- "/mnt/Data2/DS_projects/AV_test/mitosis.tif"
 
 if (!file.exists(input)) stop("File not found: ", input)
-if (!requireNamespace("magick", quietly = TRUE)) stop("magick required")
+if (!requireNamespace("tiff", quietly = TRUE)) stop("tiff required")
 
 size_in <- file.info(input)$size / 1024
 cat(sprintf("Input: %s (%.1f KB)\n", basename(input), size_in))
 
-# ── Extract TIFF to PNG sequence ────────────────────────────────────────
+# ── Extract TIFF to 16-bit frame sequence ───────────────────────────────
 tmpdir <- tempfile("av1r_cqp_")
-dir.create(tmpdir)
 on.exit(unlink(tmpdir, recursive = TRUE))
 
-img <- magick::image_read(input)
-n <- length(img)
-cat(sprintf("Extracting %d frames...\n", n))
-for (i in seq_len(n)) {
-  frame <- magick::image_convert(img[i], type = "TrueColor", depth = 8)
-  magick::image_write(frame, file.path(tmpdir, sprintf("frame%06d.png", i)),
-                      format = "png")
-}
-seq_pattern <- file.path(tmpdir, "frame%06d.png")
+seq_pattern <- AV1R:::.tiff_to_frame_sequence(input, tmpdir)
 
 info <- AV1R:::.ffmpeg_video_info(seq_pattern)
 sz   <- AV1R:::.compute_output_size(info$width, info$height)

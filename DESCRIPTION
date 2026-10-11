@@ -24,11 +24,11 @@ Encoding: UTF-8
 SystemRequirements: FFmpeg (>= 4.4) with 'libsvtav1', libvulkan-dev and
         glslc (optional, for GPU encoding on Linux), Vulkan SDK
         (optional, for GPU encoding on Windows)
-Suggests: magick, testthat (>= 3.0.0), tiff, withr
+Suggests: testthat (>= 3.0.0), tiff, withr
 RoxygenNote: 7.3.3
 Config/testthat/edition: 3
 NeedsCompilation: yes
-Packaged: 2026-10-11 19:48:39 UTC; yuri
+Packaged: 2026-10-11 21:11:59 UTC; yuri
 Author: Yuri Baramykov [aut, cre] (<https://orcid.org/0009-0000-7627-4217>),
   The Khronos Group Inc. [cph],
   FFmpeg developers [cph]

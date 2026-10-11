@@ -26,12 +26,8 @@ test_that("detect_backend returns valid value", {
 })
 
 test_that("detect_backend returns vulkan when Vulkan is available", {
-  if (vulkan_available()) {
-    result <- detect_backend("vulkan")
-    expect_equal(result, "vulkan")
-  } else {
-    skip("Vulkan not available on this machine")
-  }
+  skip_if_no_vulkan_av1()
+  expect_equal(detect_backend("vulkan"), "vulkan")
 })
 
 test_that("detect_backend falls back to vaapi or cpu when Vulkan unavailable", {
