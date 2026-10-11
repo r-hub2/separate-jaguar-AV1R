@@ -183,10 +183,13 @@ convert_to_av1 <- function(input, output, options = av1r_options()) {
 
   audio_args <- if (is_image) c("-an") else c("-c:a", "copy")
 
+  # -vsync passthrough: one output frame per input frame. Without it ffmpeg
+  # duplicates a frame for inputs without pts (AVI), shifting the video by one.
   args <- c(
     "-y",
     input_args,
     scale_args,
+    "-vsync", "passthrough",
     encode_args,
     audio_args,
     shQuote(output)
@@ -295,6 +298,7 @@ convert_to_av1 <- function(input, output, options = av1r_options()) {
     "-vaapi_device", "/dev/dri/renderD128",
     input_args,
     "-vf", vf,
+    "-vsync", "passthrough",
     "-c:v", "av1_vaapi",
     rate_args,
     audio_args,
@@ -458,7 +462,7 @@ convert_to_av1 <- function(input, output, options = av1r_options()) {
   stopifnot(is.numeric(crf), length(crf) == 1, crf >= 0, crf <= 63)
   crf <- as.integer(crf)
   knots_cpu    <- c( 0L,  1L,  3L,  5L,  8L, 10L, 15L, 20L, 30L, 40L, 50L, 63L)
-  knots_vulkan <- c( 1L,  2L,  2L,  3L,  5L,  7L, 11L, 15L, 30L, 40L, 50L, 63L)
+  knots_vulkan <- c( 1L,  2L,  3L,  3L,  5L,  7L, 12L, 15L, 30L, 40L, 50L, 63L)
   as.integer(round(stats::approx(knots_cpu, knots_vulkan, xout = crf, rule = 2)$y))
 }
 
@@ -477,7 +481,7 @@ convert_to_av1 <- function(input, output, options = av1r_options()) {
 
   dir.create(tmpdir, recursive = TRUE, showWarnings = FALSE)
 
-  n <- nrow(tiff::readTIFF(tiff_path, all = TRUE, payload = FALSE))
+  n <- nrow(.quiet_tiff(tiff::readTIFF(tiff_path, all = TRUE, payload = FALSE)))
   if (n == 0L) stop("No images in TIFF: ", tiff_path)
   message(sprintf("AV1R: extracting %d frames from TIFF stack...", n))
 
@@ -485,7 +489,7 @@ convert_to_av1 <- function(input, output, options = av1r_options()) {
   # readTIFF() scales samples to [0, 1]; 16-bit output keeps the precision
   # and ffmpeg does the conversion to the encoder pixel format.
   for (i in seq_len(n)) {
-    page <- tiff::readTIFF(tiff_path, all = i)[[1L]]
+    page <- .quiet_tiff(tiff::readTIFF(tiff_path, all = i))[[1L]]
     tiff::writeTIFF(page, file.path(tmpdir, sprintf("frame%06d.tif", i)),
                     bits.per.sample = 16L, compression = "none")
   }

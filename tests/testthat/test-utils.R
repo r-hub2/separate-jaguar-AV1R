@@ -25,3 +25,11 @@ test_that("fmt_bytes formats bytes correctly", {
 test_that("fmt_bytes handles large values", {
   expect_equal(AV1R:::fmt_bytes(2.5 * 1024^3), "2.5 GB")
 })
+
+test_that(".quiet_tiff drops unknown-tag warnings only", {
+  expect_no_warning(AV1R:::.quiet_tiff(
+    warning("TIFFReadDirectory: Unknown field with tag 50838 (0xc696) encountered")))
+  expect_warning(AV1R:::.quiet_tiff(warning("TIFFReadDirectory: something else")),
+                 "something else")
+  expect_equal(AV1R:::.quiet_tiff(42L), 42L)
+})

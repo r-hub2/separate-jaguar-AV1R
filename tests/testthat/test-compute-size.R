@@ -52,11 +52,11 @@ test_that(".compute_output_size respects custom min_w and min_h", {
 test_that(".crf_to_vulkan_crf maps calibration knots exactly", {
   expect_equal(AV1R:::.crf_to_vulkan_crf(0),   1L)
   expect_equal(AV1R:::.crf_to_vulkan_crf(1),   2L)
-  expect_equal(AV1R:::.crf_to_vulkan_crf(3),   2L)
+  expect_equal(AV1R:::.crf_to_vulkan_crf(3),   3L)
   expect_equal(AV1R:::.crf_to_vulkan_crf(5),   3L)
   expect_equal(AV1R:::.crf_to_vulkan_crf(8),   5L)
   expect_equal(AV1R:::.crf_to_vulkan_crf(10),  7L)
-  expect_equal(AV1R:::.crf_to_vulkan_crf(15), 11L)
+  expect_equal(AV1R:::.crf_to_vulkan_crf(15), 12L)
   expect_equal(AV1R:::.crf_to_vulkan_crf(20), 15L)
   expect_equal(AV1R:::.crf_to_vulkan_crf(30), 30L)
   expect_equal(AV1R:::.crf_to_vulkan_crf(40), 40L)

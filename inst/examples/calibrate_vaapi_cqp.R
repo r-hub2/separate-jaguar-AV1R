@@ -102,7 +102,7 @@ if (has_vulkan) {
     kb <- tryCatch({
       .Call("R_av1r_vulkan_encode",
             seq_pattern, out,
-            sz$width, sz$height, 25L, as.integer(crf),
+            sz$width, sz$height, 25L, 1L, as.integer(crf),
             PACKAGE = "AV1R")
       if (file.exists(out)) {
         s <- file.info(out)$size / 1024

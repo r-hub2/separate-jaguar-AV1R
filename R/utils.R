@@ -20,3 +20,12 @@ fmt_bytes <- function(x) {
   while (x >= 1024 && i < length(units)) { x <- x / 1024; i <- i + 1L }
   sprintf("%.1f %s", x, units[i])
 }
+
+# libtiff warns on every page about private tags it does not know, such as
+# ImageJ's 50838/50839. They do not affect pixel data, so drop just those.
+.quiet_tiff <- function(expr) {
+  withCallingHandlers(expr, warning = function(w) {
+    if (startsWith(conditionMessage(w), "TIFFReadDirectory: Unknown field with tag"))
+      invokeRestart("muffleWarning")
+  })
+}
