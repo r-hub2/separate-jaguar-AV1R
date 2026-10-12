@@ -1,3 +1,8 @@
+# AV1R 0.1.4.1
+
+* Added missing `#include <string>` in C++ sources (fixes compilation
+  with clang 23 / libc++).
+
 # AV1R 0.1.4
 
 * New `archive_tiff()`: lossless 16-bit TIFF stacks to FFV1 in MKV,

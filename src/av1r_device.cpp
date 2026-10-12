@@ -13,6 +13,7 @@
 #include <cstring>
 #include <vector>
 #include <stdexcept>
+#include <string>
 #include "av1r_vulkan_ctx.h"
 
 int av1r_device_count(VkInstance instance)

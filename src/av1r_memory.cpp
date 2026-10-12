@@ -11,6 +11,7 @@
 #include "vk_video/vulkan_video_encode_av1_khr.h"
 #include <vector>
 #include <stdexcept>
+#include <string>
 #include <cstring>
 #include <cstdio>
 #include "av1r_vulkan_ctx.h"

@@ -11,6 +11,7 @@
 
 #include <vulkan/vulkan.h>
 #include <stdexcept>
+#include <string>
 #include <cstdint>
 #include "av1r_vulkan_ctx.h"
 

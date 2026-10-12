@@ -1,7 +1,7 @@
 Package: AV1R
 Type: Package
 Title: 'AV1' Video Encoding for Biological Microscopy Data
-Version: 0.1.4
+Version: 0.1.4.1
 Authors@R: c(
         person("Yuri", "Baramykov",
         email = "lbsbmsu@mail.ru",
@@ -28,7 +28,7 @@ Suggests: testthat (>= 3.0.0), tiff, withr
 RoxygenNote: 7.3.3
 Config/testthat/edition: 3
 NeedsCompilation: yes
-Packaged: 2026-10-11 21:31:50 UTC; yuri
+Packaged: 2026-10-12 11:02:38 UTC; yuri
 Author: Yuri Baramykov [aut, cre] (<https://orcid.org/0009-0000-7627-4217>),
   The Khronos Group Inc. [cph],
   FFmpeg developers [cph]

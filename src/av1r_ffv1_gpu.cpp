@@ -8,6 +8,7 @@
 
 #include <cstring>
 #include <stdexcept>
+#include <string>
 
 namespace av1r {
 namespace ffv1 {
