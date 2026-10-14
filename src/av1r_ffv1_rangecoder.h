@@ -4,6 +4,7 @@
 // byte-identical bitstream, so this code is the ground truth for the GPU path.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 

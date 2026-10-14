@@ -2,6 +2,7 @@
 
 * Added missing `#include <string>` in C++ sources (fixes compilation
   with clang 23 / libc++).
+* Added missing `#include <cstddef>` in C++ headers using `size_t`.
 
 # AV1R 0.1.4
 

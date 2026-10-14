@@ -5,6 +5,7 @@
 // (intra = 1), per-slice CRC (ec = 1).
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
